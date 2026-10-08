@@ -17,7 +17,11 @@ import com.chaquo.python.android.AndroidPlatform;
 /** Mantém o servidor do NotaXML (Python) rodando dentro do aplicativo, mesmo com a tela fechada. */
 public class ServidorService extends Service {
     private static final String TAG = "NotaXML";
-    private static final String CANAL = "notaxml";
+    // Canal discreto (importância mínima): sem ícone na barra de status, só uma linha entre as notificações.
+    // O canal antigo ("notaxml") tinha importância normal; o Android não deixa mudar a importância de um canal
+    // já criado, por isso o novo nome.
+    private static final String CANAL = "notaxml_discreto";
+    private static final String CANAL_ANTIGO = "notaxml";
     private static final int ID_NOTIFICACAO = 1;
     private static boolean iniciado = false;
 
@@ -29,6 +33,9 @@ public class ServidorService extends Service {
                 .setContentTitle("NotaXML")
                 .setContentText("Servidor local em execução. Toque para abrir.")
                 .setOngoing(true)
+                .setShowWhen(false)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .setVisibility(Notification.VISIBILITY_SECRET)
                 .setContentIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
                         PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT))
                 .build();
@@ -42,8 +49,13 @@ public class ServidorService extends Service {
     }
 
     private void criarCanal() {
-        NotificationChannel canal = new NotificationChannel(CANAL, "NotaXML", NotificationManager.IMPORTANCE_LOW);
-        getSystemService(NotificationManager.class).createNotificationChannel(canal);
+        NotificationManager gerente = getSystemService(NotificationManager.class);
+        gerente.deleteNotificationChannel(CANAL_ANTIGO);
+        NotificationChannel canal = new NotificationChannel(CANAL, "NotaXML em segundo plano",
+                NotificationManager.IMPORTANCE_MIN);
+        canal.setShowBadge(false);
+        canal.setDescription("Aviso fixo de que o NotaXML está sincronizando as notas em segundo plano");
+        gerente.createNotificationChannel(canal);
     }
 
     private synchronized void iniciarServidor() {
