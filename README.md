@@ -97,6 +97,41 @@ Use o próprio `NotaXML.exe`. Ele fica aberto para a rede interna, protegido por
 - **Sem Docker (Linux):** `pip install .` e depois
   `NOTAXML_WEB_SENHA=... notaxml web --host 0.0.0.0 --sem-navegador` (use systemd para manter ligado).
 
+## Celular Android (roda no próprio celular)
+
+O aplicativo `NotaXML.apk` leva o sistema inteiro dentro do celular: o Python, o certificado, o banco e os XMLs
+ficam no aparelho e as notas vêm direto da SEFAZ. Precisa de **Android 10 ou mais novo** e processador de 64 bits.
+
+1. Baixe o `NotaXML.apk` na página de **Releases** e abra o arquivo no celular. O Android pede para permitir a
+   instalação de fontes desconhecidas para o navegador/gerenciador de arquivos, e o Play Protect pode avisar que o
+   app não é da loja: é esperado, o APK é só seu.
+2. Abra o **NotaXML**. Na primeira vez ele demora cerca de um minuto para preparar o Python.
+3. Na tela de boas-vindas, escolha o certificado A1 (`.pfx`) no seletor de arquivos do celular, digite a senha e a UF.
+   O certificado pode estar no armazenamento do celular, no Google Drive, etc.
+4. Use como no computador: notas, contas a pagar, manifestação, DANFE. PDFs abrem na hora; XMLs, ZIPs e CSVs ficam em
+   **Downloads/NotaXML**.
+
+Pontos importantes:
+
+- **Use o NotaXML em um único lugar para cada CNPJ** (computador, servidor **ou** celular). Cada instalação guarda a
+  própria posição de consulta e a SEFAZ **bloqueia** (erro 656) quem consulta de novo em menos de 1 hora. Duas
+  instalações do mesmo CNPJ vão se atrapalhar.
+- Os dados ficam **só no celular** (armazenamento privado do app, sem backup do Android). Desinstalar apaga tudo.
+  Os XMLs em Downloads/NotaXML são cópias que você baixou.
+- O sistema fica ligado enquanto o app estiver na memória (aparece o aviso fixo "Servidor local em execução").
+  O Android pode encerrá-lo para poupar bateria; desative a otimização de bateria do NotaXML para a sincronização
+  automática continuar. Ao abrir o app, se já passou 1 hora, ele sincroniza sozinho.
+- A **senha do certificado** não é guardada no celular: se o Android encerrar o app, ela é pedida de novo em
+  **Certificado**.
+- Se **Testar conexão** apontar erro de verificação do servidor, envie a cadeia ICP-Brasil (`.pem`) em
+  **Configurações → Avançado**.
+- **Atualizar:** instale o APK novo por cima (a assinatura é a mesma e os dados ficam). Se o Android recusar por
+  "conflito de assinatura", é porque o app foi instalado de outra origem: desinstale e instale de novo.
+- O app é testado automaticamente num emulador Android (inicia, sobe o servidor, assina um evento e gera um DANFE),
+  mas **não foi testado em aparelho real**. Se algo falhar, anote a mensagem exibida.
+- O acesso ao servidor local do app é protegido por um segredo aleatório que só o próprio app conhece, porque outros
+  aplicativos do celular também alcançam o endereço local.
+
 ## Como funciona
 
 1. A SEFAZ numera cada documento disponível para o seu CNPJ com um **NSU** sequencial.
@@ -279,3 +314,4 @@ Se o `xmlsec1` estiver instalado, a assinatura da manifestação também é vali
 | `notaxml/cli.py` | Linha de comando |
 | `notaxml/web/` | Interface web (Flask): rotas, login, tarefas em segundo plano, templates e estilos |
 | `Dockerfile`, `docker-compose.yml` | Hospedagem em servidor |
+| `android/` | Aplicativo Android (Chaquopy): serviço Python + WebView; `ci/` tem o teste no emulador |
