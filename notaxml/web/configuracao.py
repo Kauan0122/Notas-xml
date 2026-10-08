@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from pathlib import Path
 
+from cryptography import x509
 from flask import flash, redirect, render_template, request, session, url_for
 
 from .. import segredo
@@ -14,7 +15,9 @@ from ..rede import ENDERECOS_LOCAIS, TAMANHO_MINIMO_SENHA, endereco_na_rede
 from ..ufs import CODIGOS_UF
 
 NOME_CERTIFICADO = "certificado.pfx"
+NOME_CADEIA = "icp-brasil.pem"
 TAMANHO_MAXIMO_PFX = 1024 * 1024
+TAMANHO_MAXIMO_CADEIA = 1024 * 1024
 
 
 class ErroFormulario(Exception):
@@ -28,6 +31,7 @@ def _valores_atuais(secoes: dict, pasta_config: Path) -> dict:
         "cnpj": empresa.get("cnpj", ""),
         "uf": str(empresa.get("uf", "")).upper(),
         "ambiente": sefaz.get("ambiente", "producao"),
+        "tem_cadeia": bool(sefaz.get("ca_bundle")) and (pasta_config / str(sefaz.get("ca_bundle"))).is_file(),
         "tem_certificado": bool(arquivo) and (pasta_config / arquivo).is_file(),
         "senha_lembrada": bool(cert.get("senha")),
         "ciencia_automatica": secoes.get("sincronizacao", {}).get("ciencia_automatica", False),
@@ -59,8 +63,25 @@ def _validar_acesso_rede(form, caminho_config: Path) -> dict:
     return alteracoes
 
 
+def _ler_cadeia(arquivo) -> bytes | None:
+    """Cadeia de certificados (PEM) enviada na tela, validada. None se nenhum arquivo foi escolhido."""
+    if not arquivo or not arquivo.filename:
+        return None
+    dados = arquivo.read(TAMANHO_MAXIMO_CADEIA + 1)
+    if len(dados) > TAMANHO_MAXIMO_CADEIA:
+        raise ErroFormulario("Arquivo grande demais para uma cadeia de certificados.")
+    try:
+        certificados = x509.load_pem_x509_certificates(dados)
+    except ValueError:
+        certificados = []
+    if not certificados:
+        raise ErroFormulario("A cadeia precisa ser um arquivo PEM com um ou mais certificados "
+                             "(texto com \"BEGIN CERTIFICATE\").")
+    return dados
+
+
 def processar(form, arquivo_pfx, caminho_config: Path, pasta_dados_padrao: Path | None,
-              opcoes_rede: bool = False) -> str | None:
+              opcoes_rede: bool = False, arquivo_cadeia=None) -> str | None:
     """Valida e grava a configuração. Devolve a senha informada (para desbloquear o certificado já)."""
     secoes = ler_secoes(caminho_config)
     pasta = caminho_config.parent
@@ -97,6 +118,7 @@ def processar(form, arquivo_pfx, caminho_config: Path, pasta_dados_padrao: Path 
         raise ErroFormulario("Ambiente inválido.")
 
     web_novo = _validar_acesso_rede(form, caminho_config) if opcoes_rede else None
+    dados_cadeia = _ler_cadeia(arquivo_cadeia)
 
     if dados_pfx is not None:
         destino = pasta / NOME_CERTIFICADO
@@ -113,6 +135,9 @@ def processar(form, arquivo_pfx, caminho_config: Path, pasta_dados_padrao: Path 
     elif not form.get("lembrar") or dados_pfx is not None:
         cert.pop("senha", None)  # nunca guarda senha em texto puro
     secoes.setdefault("sefaz", {})["ambiente"] = ambiente
+    if dados_cadeia is not None:
+        (pasta / NOME_CADEIA).write_bytes(dados_cadeia)
+        secoes["sefaz"]["ca_bundle"] = NOME_CADEIA
     if "armazenamento" not in secoes and pasta_dados_padrao is not None:
         secoes["armazenamento"] = {"pasta": str(pasta_dados_padrao)}
     secoes.setdefault("sincronizacao", {})["ciencia_automatica"] = bool(form.get("ciencia_automatica"))
@@ -142,7 +167,7 @@ def registrar(app, caminho_config: Path, recarregar: Callable, pasta_dados_padra
                 antes = ler_config_web(caminho_config)
                 try:
                     senha = processar(request.form, request.files.get("certificado"), caminho_config,
-                                      pasta_dados_padrao, opcoes_rede)
+                                      pasta_dados_padrao, opcoes_rede, request.files.get("cadeia"))
                 except (ErroFormulario, ErroNotaXML) as exc:
                     flash(str(exc), "erro")
                 else:

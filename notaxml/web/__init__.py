@@ -123,7 +123,7 @@ def _flask(chave_secreta: str | None, https: bool = False) -> Flask:
 def criar_app_configuracao(caminho_config: Path, recarregar: Callable, pasta_dados_padrao: Path | None = None,
                            erro: str | None = None, chave_secreta: str | None = None,
                            opcoes_web: ConfigWeb | None = None, limitador: LimitadorLogin | None = None,
-                           opcoes_rede: bool = False) -> Flask:
+                           opcoes_rede: bool = False, token_cookie: str | None = None) -> Flask:
     """App usado enquanto não existe configuração válida: só mostra a tela de configuração."""
     opcoes_web = opcoes_web or ConfigWeb()
     app = _flask(chave_secreta, opcoes_web.https)
@@ -132,7 +132,7 @@ def criar_app_configuracao(caminho_config: Path, recarregar: Callable, pasta_dad
     def contexto():
         return {"cfg": None, "csrf_token": csrf_token, "tarefas": None, "erro_config": erro, "versao": __version__}
 
-    exige_login(app, opcoes_web.senha)  # primeiro: quem não entrou vai direto para o login
+    exige_login(app, opcoes_web.senha, token_cookie=token_cookie)  # primeiro: quem não entrou vai ao login
     registrar_login(app, opcoes_web.senha, limitador, destino_padrao="/configuracao")
 
     @app.before_request
@@ -149,7 +149,8 @@ def criar_app_configuracao(caminho_config: Path, recarregar: Callable, pasta_dad
 def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminho_config: Path | None = None,
               recarregar: Callable | None = None, pasta_dados_padrao: Path | None = None,
               desktop: bool = False, chave_secreta: str | None = None,
-              limitador: LimitadorLogin | None = None, opcoes_rede: bool = False) -> Flask:
+              limitador: LimitadorLogin | None = None, opcoes_rede: bool = False,
+              token_cookie: str | None = None) -> Flask:
     app = _flask(chave_secreta, cfg.web.https)
     app.config["NOTAXML"] = cfg
     gerenciador = gerenciador or GerenciadorTarefas(cfg)
@@ -191,7 +192,7 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
         verificar_csrf()
         return None
 
-    exige_login(app, cfg.web.senha)
+    exige_login(app, cfg.web.senha, token_cookie=token_cookie)
     registrar_login(app, cfg.web.senha, limitador, destino_padrao="/")
 
     if caminho_config is not None and recarregar is not None:

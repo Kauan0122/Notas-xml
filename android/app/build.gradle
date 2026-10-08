@@ -1,0 +1,72 @@
+plugins {
+    id 'com.android.application'
+    id 'com.chaquo.python'
+}
+
+// A versão do aplicativo é a mesma do pyproject.toml (uma única fonte).
+def versao = (file('../../pyproject.toml').text =~ /(?m)^version\s*=\s*"([^"]+)"/)[0][1]
+def partes = versao.tokenize('.').collect { it as int }
+
+android {
+    namespace 'br.com.notaxml'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'br.com.notaxml'
+        minSdk 29            // Android 10 ou mais novo
+        targetSdk 35
+        versionCode partes[0] * 10000 + partes[1] * 100 + partes[2]
+        versionName versao
+        ndk {
+            abiFilters 'arm64-v8a', 'x86_64'   // celulares atuais e o emulador
+        }
+    }
+
+    // Chave fixa de assinatura: sem ela cada compilação teria uma assinatura nova e o Android recusaria atualizar
+    // o aplicativo já instalado. É uma chave de uso pessoal (instalação direta do APK, fora da Play Store).
+    signingConfigs {
+        release {
+            storeFile file('../notaxml.keystore')
+            storePassword 'notaxml'
+            keyAlias 'notaxml'
+            keyPassword 'notaxml'
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+chaquopy {
+    defaultConfig {
+        version '3.12'
+        pip {
+            install 'requests'
+            install 'lxml'
+            install 'cryptography'
+            install 'flask'
+            install 'waitress'
+            install 'brazilfiscalreport'
+        }
+        // pacotes que leem os próprios arquivos (modelos HTML, estilos, fontes) precisam ser extraídos do APK
+        extractPackages 'notaxml', 'brazilfiscalreport', 'fpdf', 'barcode'
+    }
+}
+
+// O código Python é o mesmo do NotaXML.exe e do Docker: copiado da pasta notaxml/ do repositório.
+tasks.register('copiarPython', Copy) {
+    from('../../notaxml') {
+        exclude '**/__pycache__/**', '**/*.pyc'
+    }
+    into 'src/main/python/notaxml'
+}
+tasks.named('preBuild') { dependsOn 'copiarPython' }

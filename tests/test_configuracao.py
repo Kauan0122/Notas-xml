@@ -140,3 +140,45 @@ def test_senha_de_acesso_web_pode_ficar_no_cofre_do_windows(tmp_path):
     caminho = tmp_path / "config.toml"
     salvar_config(caminho, {"web": {"senha": segredo.proteger("senha-de-acesso")}})
     assert ler_config_web(caminho).senha == "senha-de-acesso"
+
+
+def _pem(n=1):
+    import datetime
+
+    from cryptography import x509 as x
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    saida = b""
+    for i in range(n):
+        chave = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        nome = x.Name([x.NameAttribute(x.NameOID.COMMON_NAME, f"AC teste {i}")])
+        agora = datetime.datetime.now(datetime.timezone.utc)
+        cert = (x.CertificateBuilder().subject_name(nome).issuer_name(nome).public_key(chave.public_key())
+                .serial_number(x.random_serial_number()).not_valid_before(agora)
+                .not_valid_after(agora + datetime.timedelta(days=30)).sign(chave, hashes.SHA256()))
+        saida += cert.public_bytes(serialization.Encoding.PEM)
+    return saida
+
+
+def test_enviar_cadeia_icp_brasil_pela_tela(tmp_path):
+    config = tmp_path / "config.toml"
+    cliente = _cliente(Aplicacao(config))
+    pfx = gerar_pfx(CNPJ_VALIDO)
+
+    r = _enviar(cliente, certificado=(io.BytesIO(pfx), "e.pfx"), senha="1234",
+                cadeia=(io.BytesIO(b"isto nao e pem"), "cadeia.pem"))
+    assert "arquivo PEM" in r.get_data(as_text=True) and not config.exists()  # nada é gravado se algo é inválido
+
+    r = _enviar(cliente, certificado=(io.BytesIO(pfx), "e.pfx"), senha="1234", cadeia=(io.BytesIO(_pem(3)), "icp.pem"))
+    assert r.status_code == 302
+    assert (tmp_path / "icp-brasil.pem").read_bytes().count(b"BEGIN CERTIFICATE") == 3
+    cfg = carregar_config(config)
+    assert cfg.verificar_ssl == str(tmp_path / "icp-brasil.pem")
+    assert "Já existe uma cadeia salva" in cliente.get("/configuracao").get_data(as_text=True)
+
+    # salvar de novo sem escolher arquivo mantém a cadeia
+    r = cliente.post("/configuracao", data={"csrf": re.search(
+        r'name="csrf" value="([^"]+)"', cliente.get("/configuracao").get_data(as_text=True)).group(1),
+        "uf": "SP", "ambiente": "producao"})
+    assert r.status_code == 302 and carregar_config(config).verificar_ssl == str(tmp_path / "icp-brasil.pem")

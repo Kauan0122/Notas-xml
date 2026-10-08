@@ -1,0 +1,6 @@
+app/src/main/python/notaxml/
+app/build/
+build/
+.gradle/
+local.properties
+*.iml

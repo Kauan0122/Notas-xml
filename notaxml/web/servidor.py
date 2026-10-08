@@ -46,6 +46,7 @@ class Aplicacao:
         self.caminho_config = Path(caminho_config).resolve()
         self.pasta_dados_padrao = pasta_dados_padrao
         self.desktop = desktop
+        self._token_cookie = os.environ.get("NOTAXML_ACESSO_LOCAL") or None  # definido pelo app Android
         self.opcoes_rede = opcoes_rede  # mostra, em Configurações, a opção de abrir o acesso para a rede
         self._chave_secreta = chave_de_sessao(self.caminho_config.parent)
         self._limitador = LimitadorLogin()  # o mesmo entre recargas: trocar a configuração não zera o bloqueio
@@ -86,7 +87,7 @@ class Aplicacao:
                 self.cfg, self.gerenciador = None, None
                 self.app = criar_app_configuracao(self.caminho_config, self.recarregar, self.pasta_dados_padrao, erro,
                                                   self._chave_secreta, self.opcoes_web, self._limitador,
-                                                  self.opcoes_rede)
+                                                  self.opcoes_rede, self._token_cookie)
             else:
                 gerenciador = GerenciadorTarefas(cfg)
                 if gerenciador.certificado is None and senha_certificado:
@@ -97,7 +98,7 @@ class Aplicacao:
                 self.cfg, self.gerenciador = cfg, gerenciador
                 self.app = criar_app(cfg, gerenciador, self.caminho_config, self.recarregar,
                                      self.pasta_dados_padrao, self.desktop, self._chave_secreta, self._limitador,
-                                     self.opcoes_rede)
+                                     self.opcoes_rede, self._token_cookie)
                 if cfg.web.sincronizacao_automatica:
                     gerenciador.verificar_agenda()
                     gerenciador.iniciar_agendador()

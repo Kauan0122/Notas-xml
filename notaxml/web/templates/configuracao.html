@@ -77,6 +77,11 @@
           <option value="homologacao" {{ 'selected' if valores.ambiente == 'homologacao' }}>Homologação (testes)</option>
         </select>
       </label>
+      <label>Cadeia de certificados ICP-Brasil (.pem, opcional)
+        <input type="file" name="cadeia" accept=".pem,.crt,.cer">
+        <span class="muted pequeno">{% if valores.tem_cadeia %}Já existe uma cadeia salva. {% endif %}Só é preciso se o botão
+          "Testar conexão com a SEFAZ" apontar erro de verificação do servidor (comum em Linux e no celular).</span>
+      </label>
       <p class="muted pequeno">Arquivo de configuração: <span class="mono">{{ caminho_config }}</span></p>
     </details>
 

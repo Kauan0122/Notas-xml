@@ -1,3 +1,4 @@
+import os
 import ssl
 
 import requests
@@ -37,10 +38,28 @@ def _contexto_sistema(cert: str, chave: str) -> ssl.SSLContext | None:
     """Contexto TLS que confia nas autoridades do sistema (no Windows, inclui a ICP-Brasil)."""
     try:
         import truststore
-    except ImportError:
-        return None
-    contexto = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+        contexto = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except Exception:  # noqa: BLE001 - sem truststore ou sistema sem suporte (ex.: Android)
+        contexto = _contexto_com_autoridades_do_sistema()
     contexto.load_cert_chain(cert, chave)
+    return contexto
+
+
+DIRETORIOS_AUTORIDADES = ("/system/etc/security/cacerts",)  # Android
+
+
+def _contexto_com_autoridades_do_sistema() -> ssl.SSLContext:
+    contexto = ssl.create_default_context()
+    for diretorio in DIRETORIOS_AUTORIDADES:
+        if os.path.isdir(diretorio):
+            contexto.load_verify_locations(capath=diretorio)
+    try:
+        import certifi
+
+        contexto.load_verify_locations(cafile=certifi.where())
+    except (ImportError, OSError):
+        pass
     return contexto
 
 

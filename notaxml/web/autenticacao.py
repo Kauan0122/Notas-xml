@@ -48,13 +48,26 @@ class LimitadorLogin:
             self._falhas.pop(chave, None)
 
 
-def exige_login(app: Flask, senha: str | None, liberados: tuple[str, ...] = ("static", "login", "saude")):
-    """Redireciona para /login quem não entrou (quando há senha de acesso configurada)."""
+COOKIE_ACESSO_LOCAL = "acesso_local"
+
+
+def exige_login(app: Flask, senha: str | None, liberados: tuple[str, ...] = ("static", "login", "saude"),
+                token_cookie: str | None = None):
+    """Redireciona para /login quem não entrou (quando há senha de acesso configurada).
+
+    `token_cookie` (aplicativo Android): quem apresentar esse segredo no cookie `acesso_local` entra sem digitar a
+    senha. Só o próprio aplicativo o conhece; outros aplicativos do celular, que também alcançam 127.0.0.1, não.
+    """
     @app.before_request
     def _guarda():
-        if senha and request.endpoint not in liberados and not session.get("autenticado"):
-            return redirect(url_for("login", proximo=request.full_path if request.method == "GET" else "/"))
-        return None
+        if not senha or request.endpoint in liberados or session.get("autenticado"):
+            return None
+        if token_cookie and hmac.compare_digest(request.cookies.get(COOKIE_ACESSO_LOCAL, "").encode(),
+                                                token_cookie.encode()):
+            session["autenticado"] = True
+            session.permanent = True
+            return None
+        return redirect(url_for("login", proximo=request.full_path if request.method == "GET" else "/"))
 
 
 def registrar_login(app: Flask, senha: str | None, limitador: LimitadorLogin | None = None,
