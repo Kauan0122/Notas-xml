@@ -69,4 +69,10 @@ tasks.register('copiarPython', Copy) {
     }
     into 'src/main/python/notaxml'
 }
+// as tarefas do Chaquopy leem a pasta copiada: precisam esperar a cópia terminar
+tasks.configureEach { tarefa ->
+    if (tarefa.name != 'copiarPython' && tarefa.name.contains('Python')) {
+        tarefa.dependsOn 'copiarPython'
+    }
+}
 tasks.named('preBuild') { dependsOn 'copiarPython' }
