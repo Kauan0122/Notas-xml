@@ -88,12 +88,7 @@ def carregar_config(caminho: str | Path) -> Config:
     cert = dados.get("certificado", {})
     if not cert.get("arquivo"):
         raise ErroConfiguracao("Informe o caminho do certificado A1 (.pfx) em [certificado] arquivo.")
-    senha = segredo_do_ambiente("NFE_CERT_SENHA") or cert.get("senha") or None
-    if senha and senha.startswith(segredo.PREFIXO):
-        try:
-            senha = segredo.revelar(senha)
-        except (OSError, RuntimeError, ValueError):
-            senha = None  # guardada por outro usuário/computador: a interface pede de novo
+    senha = _revelar(segredo_do_ambiente("NFE_CERT_SENHA") or cert.get("senha") or None)
 
     sefaz = dados.get("sefaz", {})
     nome_ambiente = str(sefaz.get("ambiente", "producao")).lower()
@@ -120,6 +115,16 @@ def carregar_config(caminho: str | Path) -> Config:
     )
 
 
+def _revelar(senha: str | None) -> str | None:
+    """Senhas guardadas pelo cofre do Windows (prefixo "dpapi:") voltam ao texto original."""
+    if senha and senha.startswith(segredo.PREFIXO):
+        try:
+            return segredo.revelar(senha)
+        except (OSError, RuntimeError, ValueError):
+            return None  # guardada por outro usuário/computador: o sistema pede de novo
+    return senha
+
+
 def _config_web(web: dict) -> ConfigWeb:
     intervalo = int(web.get("intervalo_minutos", 60))
     if intervalo < 60:
@@ -127,7 +132,7 @@ def _config_web(web: dict) -> ConfigWeb:
     return ConfigWeb(
         host=str(web.get("host", "127.0.0.1")),
         porta=int(web.get("porta", 8000)),
-        senha=segredo_do_ambiente("NOTAXML_WEB_SENHA") or web.get("senha") or None,
+        senha=_revelar(segredo_do_ambiente("NOTAXML_WEB_SENHA") or web.get("senha") or None),
         sincronizacao_automatica=bool(web.get("sincronizacao_automatica", False)),
         intervalo_minutos=intervalo,
         https=_booleano_do_ambiente("NOTAXML_HTTPS", bool(web.get("https", False))),

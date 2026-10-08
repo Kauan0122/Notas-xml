@@ -65,6 +65,30 @@ docker compose up -d --build
   Se **Testar conexão** falhar na verificação do servidor, baixe a cadeia ICP-Brasil (veja *Problemas comuns*),
   copie o arquivo para o volume com `docker compose cp icp-brasil.pem notaxml:/dados/icp-brasil.pem`,
   descomente `NOTAXML_CA_BUNDLE` no `docker-compose.yml` e rode `docker compose up -d`.
+### Servidor Windows (sem Docker)
+
+Use o próprio `NotaXML.exe` em **modo servidor**. Ele fica aberto para a rede interna, protegido por senha.
+
+1. Crie a pasta `C:\NotaXML` e coloque nela o `NotaXML.exe` e um arquivo vazio chamado `config.toml`
+   (isso mantém tudo nessa pasta, o que facilita o backup).
+2. Abra o **Prompt de Comando** nessa pasta e rode `NotaXML.exe --servidor`. Na primeira vez ele pede para
+   você **definir a senha de acesso** (mínimo 8 caracteres; fica criptografada pelo Windows). A janela mostra o
+   endereço para usar nos outros computadores, por exemplo `http://192.168.0.50:8000`.
+3. Libere a porta só para a rede local (PowerShell como administrador):
+   `New-NetFirewallRule -DisplayName "NotaXML" -Direction Inbound -Protocol TCP -LocalPort 8000 -RemoteAddress LocalSubnet -Action Allow`
+4. Em outro computador abra o endereço, entre com a senha e faça a configuração (certificado A1, senha dele e UF).
+   Marque **Lembrar a senha** para a sincronização voltar sozinha depois de reiniciar.
+5. **Ligar sozinho com o Windows:** *Agendador de Tarefas → Criar Tarefa*: marque *Executar estando o usuário
+   conectado ou não*; *Disparador*: **Na inicialização**; *Ação*: programa `C:\NotaXML\NotaXML.exe`, argumentos
+   `--servidor`, iniciar em `C:\NotaXML`; em *Configurações* desmarque "Interromper a tarefa se ela for executada
+   por mais de 3 dias". Use a **mesma conta do Windows** que definiu a senha (a criptografia é ligada ao usuário).
+6. No roteador, reserve um IP fixo para esse computador.
+
+- **Mudar a senha de acesso:** `NotaXML.exe --servidor --redefinir-senha`.
+- **Atualizar:** baixe o novo `.exe`, finalize a tarefa no Agendador, substitua o arquivo e execute a tarefa.
+- **Backup:** copie a pasta `C:\NotaXML` inteira (tem o certificado; a senha salva só abre nesta conta/computador).
+- Para ver as mensagens (erros, endereço), feche a tarefa e rode `NotaXML.exe --servidor` no Prompt de Comando.
+
 - **Sem Docker (Linux):** `pip install .` e depois
   `NOTAXML_WEB_SENHA=... notaxml web --host 0.0.0.0 --sem-navegador` (use systemd para manter ligado).
 

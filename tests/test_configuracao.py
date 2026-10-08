@@ -131,3 +131,12 @@ def test_segredo_fora_do_windows_nao_quebra(tmp_path, monkeypatch):
     salvar_config(caminho, {"empresa": {"cnpj": CNPJ_VALIDO, "uf": "SP"},
                             "certificado": {"arquivo": "c.pfx", "senha": "dpapi:AAAA"}})
     assert carregar_config(caminho).senha is None  # a interface pede a senha
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="cofre de senhas do Windows (DPAPI)")
+def test_senha_de_acesso_web_pode_ficar_no_cofre_do_windows(tmp_path):
+    from notaxml.config import ler_config_web
+
+    caminho = tmp_path / "config.toml"
+    salvar_config(caminho, {"web": {"senha": segredo.proteger("senha-de-acesso")}})
+    assert ler_config_web(caminho).senha == "senha-de-acesso"

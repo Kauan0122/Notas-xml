@@ -4,6 +4,7 @@ import ipaddress
 import os
 import secrets
 import threading
+import tomllib
 import webbrowser
 from pathlib import Path
 
@@ -60,6 +61,14 @@ class Aplicacao:
             return ProxyFix(self._despachar, x_for=1, x_proto=1, x_host=1)
         return self._despachar
 
+    def _erro_a_mostrar(self, exc: ErroNotaXML) -> str | None:
+        """Arquivo ilegível ou com dados da empresa inválidos é erro; só com opções do servidor é primeiro uso."""
+        try:
+            secoes = tomllib.loads(self.caminho_config.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+            return str(exc)
+        return str(exc) if "empresa" in secoes else None
+
     def recarregar(self, senha_certificado: str | None = None):
         with self._trava:
             anterior = self.gerenciador
@@ -70,7 +79,7 @@ class Aplicacao:
                 try:
                     cfg = carregar_config(self.caminho_config)
                 except ErroNotaXML as exc:
-                    erro = str(exc)
+                    erro = self._erro_a_mostrar(exc)
             if cfg is None:
                 self.cfg, self.gerenciador = None, None
                 self.app = criar_app_configuracao(self.caminho_config, self.recarregar, self.pasta_dados_padrao, erro,

@@ -119,6 +119,36 @@ jobs:
             Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           }
 
+      - name: Testar o modo servidor do executável (aberto para a rede, com senha)
+        shell: pwsh
+        env:
+          NOTAXML_SEM_NAVEGADOR: "1"
+          NFE_CERT_SENHA: "1234"
+          NOTAXML_WEB_SENHA: "senha-de-teste-123"
+        run: |
+          python empacotamento/preparar_teste.py servidor | Out-Null
+          Copy-Item dist\NotaXML.exe servidor\
+          $p = Start-Process -FilePath (Resolve-Path servidor\NotaXML.exe) -ArgumentList "--servidor" -WorkingDirectory servidor `
+                 -PassThru -RedirectStandardOutput saida2.txt -RedirectStandardError erros2.txt
+          $ok = $false
+          for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
+            Start-Sleep -Seconds 1
+            try { $ok = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/saude).Content -eq "notaxml" } catch {}
+          }
+          Get-Content saida2.txt, erros2.txt -ErrorAction SilentlyContinue
+          try {
+            if (-not $ok) { throw "O executável não respondeu em modo servidor" }
+            # escutando em todas as interfaces (e não só no próprio computador)
+            $escuta = (Get-NetTCPConnection -LocalPort 8000 -State Listen).LocalAddress
+            if ($escuta -notcontains "0.0.0.0") { throw "Não está aberto para a rede (escutando em: $escuta)" }
+            # exige login
+            $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/ -MaximumRedirection 0 -SkipHttpErrorCheck
+            if ($r.StatusCode -ne 302 -or $r.Headers.Location -notmatch "/login") { throw "Não pediu login" }
+            Write-Host "Modo servidor OK"
+          } finally {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: NotaXML-windows
