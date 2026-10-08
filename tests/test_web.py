@@ -1,5 +1,6 @@
 import io
 import re
+from datetime import date
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -257,3 +258,108 @@ def test_zip_de_danfes_das_selecionadas(ambiente):
     r = cliente.post("/acoes/selecionadas", data={"csrf": csrf, "acao": "danfe", "chave": [OUTRA]},
                      follow_redirects=True)
     assert "Nenhuma das notas escolhidas" in r.get_data(as_text=True)
+
+
+# ---- contas a pagar -----------------------------------------------------------
+
+def _popular_com_parcelas(cfg):
+    from datetime import timedelta
+
+    from .nfe_exemplo import CHAVE_COMPLETA
+    from .test_titulos import _com_parcelas
+
+    hoje = date.today()
+    banco = Armazenamento(cfg.pasta_dados)
+    banco.guardar("procNFe", _com_parcelas([
+        ("001", (hoje - timedelta(days=3)).isoformat(), "500.00"),
+        ("002", hoje.isoformat(), "300.00"),
+        ("003", (hoje + timedelta(days=40)).isoformat(), "775.00"),
+    ]).encode())
+    banco.fechar()
+    return CHAVE_COMPLETA
+
+
+def test_tela_de_contas_a_pagar(ambiente):
+    app, _, _, _, cfg = ambiente()
+    chave = _popular_com_parcelas(cfg)
+    cliente = app.test_client()
+
+    html = cliente.get("/pagar").get_data(as_text=True)
+    assert "Contas a pagar" in html and "FORNECEDOR SA" in html
+    assert "R$ 500,00" in html and "R$ 775,00" in html
+    assert "vencido" in html                       # parcela atrasada destacada
+    assert 'class="contador"' in cliente.get("/").get_data(as_text=True)  # aviso no menu (1 vencido + 1 hoje)
+
+    # filtros: só o que vence nos próximos dias e pagos
+    ate_hoje = cliente.get("/pagar?de=2000-01-01&ate=" + date.today().isoformat()).get_data(as_text=True)
+    assert "R$ 775,00" not in ate_hoje.split("<tbody>")[1]
+    assert "Nenhum título com esses filtros" in cliente.get("/pagar?situacao=pago").get_data(as_text=True)
+    assert f"/nota/{chave}" in html
+
+
+def test_marcar_como_pago_reabrir_e_excluir(ambiente):
+    app, _, _, _, cfg = ambiente()
+    chave = _popular_com_parcelas(cfg)
+    cliente = app.test_client()
+    csrf = _csrf(cliente)
+
+    banco = Armazenamento(cfg.pasta_dados)
+    ids = [t["id"] for t in banco.titulos()]
+    banco.fechar()
+
+    r = cliente.post("/pagar/acao", data={"csrf": csrf, "acao": "pagar", "id": ids[:2], "data_pagamento": "2026-10-10"},
+                     follow_redirects=True)
+    assert "2 título(s) marcado(s) como pago(s)" in r.get_data(as_text=True)
+    banco = Armazenamento(cfg.pasta_dados)
+    assert [t["situacao"] for t in banco.titulos()] == ["pago", "pago", "aberto"]
+    assert banco.titulos()[0]["pago_em"] == "2026-10-10"
+    banco.fechar()
+
+    assert "Informe a data do pagamento" in cliente.post(
+        "/pagar/acao", data={"csrf": csrf, "acao": "pagar", "id": ids[2], "data_pagamento": "10/10/2026"},
+        follow_redirects=True).get_data(as_text=True)
+
+    cliente.post("/pagar/acao", data={"csrf": csrf, "acao": "reabrir", "id": ids[:1]})
+    banco = Armazenamento(cfg.pasta_dados)
+    assert [t["situacao"] for t in banco.titulos()] == ["aberto", "pago", "aberto"]
+    banco.fechar()
+
+    # parcela que veio da nota não pode ser excluída; lançamento manual pode
+    cliente.post(f"/nota/{chave}/titulo", data={"csrf": csrf, "vencimento": "2026-12-25", "valor": "1.234,56",
+                                                 "observacao": "frete"})
+    banco = Armazenamento(cfg.pasta_dados)
+    manual = [t for t in banco.titulos() if t["origem"] == "manual"][0]
+    assert manual["valor"] == 1234.56 and manual["observacao"] == "frete"
+    banco.fechar()
+    cliente.post("/pagar/acao", data={"csrf": csrf, "acao": "excluir", "id": [ids[0], manual["id"]]})
+    banco = Armazenamento(cfg.pasta_dados)
+    assert len(banco.titulos()) == 3 and all(t["origem"] == "nota" for t in banco.titulos())
+    banco.fechar()
+
+
+def test_lancamento_manual_valida_os_campos(ambiente):
+    app, _, _, _, cfg = ambiente()
+    chave = _popular_com_parcelas(cfg)
+    cliente = app.test_client()
+    csrf = _csrf(cliente)
+    r = cliente.post(f"/nota/{chave}/titulo", data={"csrf": csrf, "vencimento": "2026-12-25", "valor": "abc"},
+                     follow_redirects=True)
+    assert "Valor inválido" in r.get_data(as_text=True)
+    r = cliente.post("/pagar/acao", data={"csrf": csrf, "acao": "pagar", "id": "x"})
+    assert r.status_code == 400
+    assert "Selecione ao menos um título" in cliente.post(
+        "/pagar/acao", data={"csrf": csrf, "acao": "pagar"}, follow_redirects=True).get_data(as_text=True)
+    assert "Parcela lançada" in cliente.post(
+        f"/nota/{chave}/titulo", data={"csrf": csrf, "vencimento": "2026-12-25", "valor": "10"},
+        follow_redirects=True).get_data(as_text=True)
+    page = cliente.get(f"/nota/{chave}").get_data(as_text=True)
+    assert "Contas a pagar desta nota" in page and "lançada à mão" in page
+
+
+def test_csv_de_contas_a_pagar(ambiente):
+    app, _, _, _, cfg = ambiente()
+    _popular_com_parcelas(cfg)
+    r = app.test_client().get("/pagar.csv")
+    texto = r.data.decode("utf-8-sig")
+    assert r.mimetype == "text/csv" and texto.startswith("fornecedor;cnpj;nota;parcela;vencimento;valor")
+    assert texto.count("\n") == 4 and "500,00" in texto

@@ -14,6 +14,8 @@
       {% if cfg and (not cfg.web.senha or session.get('autenticado')) %}
       <nav>
         <a href="{{ url_for('notas') }}" class="{{ 'ativo' if request.endpoint == 'notas' }}">Notas</a>
+        <a href="{{ url_for('pagar') }}" class="{{ 'ativo' if request.endpoint == 'pagar' }}">Contas a pagar{% if pagar_atencao %}
+          <span class="contador" title="Vencidos ou vencendo hoje">{{ pagar_atencao }}</span>{% endif %}</a>
         <a href="{{ url_for('certificado') }}" class="{{ 'ativo' if request.endpoint == 'certificado' }}">Certificado</a>
         {% if configuravel %}<a href="{{ url_for('configuracao') }}" class="{{ 'ativo' if request.endpoint == 'configuracao' }}">Configurações</a>{% endif %}
         {% if cfg.web.senha %}

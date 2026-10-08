@@ -7,7 +7,7 @@ import subprocess
 import sys
 import zipfile
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import partial
 from pathlib import Path
 
@@ -24,6 +24,7 @@ from ..config import Config, ConfigWeb
 from ..danfe import gerar_danfe
 from ..erros import ErroNotaXML
 from ..manifestacao import EVENTOS
+from ..titulos import ErroTitulo, FiltroTitulos, classificar, escrever_csv, ler_data, ler_valor
 from .tarefas import GerenciadorTarefas
 
 POR_PAGINA = 100
@@ -89,6 +90,18 @@ def _filtro_da_requisicao(origem) -> Filtro:
         inicio=data_valida("de"),
         fim=data_valida("ate"),
     )
+
+
+def _filtro_titulos(origem) -> FiltroTitulos:
+    def data_valida(nome):
+        try:
+            return date.fromisoformat(origem.get(nome, "").strip()).isoformat()
+        except ValueError:
+            return ""
+
+    situacao = origem.get("situacao", "aberto")  # sem escolha, mostra o que está em aberto
+    return FiltroTitulos(situacao=situacao if situacao in ("aberto", "pago", "cancelado") else "",
+                         texto=origem.get("q", "").strip(), de=data_valida("de"), ate=data_valida("ate"))
 
 
 def _flask(chave_secreta: str | None, https: bool = False) -> Flask:
@@ -167,6 +180,8 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
             "configuravel": caminho_config is not None,
             "desktop": desktop,
             "versao": __version__,
+            "pagar_atencao": banco().resumo_titulos(date.today()).atencao,
+            "faixa_vencimento": lambda vencimento: classificar(vencimento, date.today()),
         }
 
     @app.before_request
@@ -233,7 +248,7 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
         registro = b.nota(chave)
         if registro is None:
             abort(404)
-        return render_template("nota.html", nota=registro, eventos=b.eventos(chave))
+        return render_template("nota.html", nota=registro, eventos=b.eventos(chave), titulos=b.titulos_por_chave(chave))
 
     def _pdf_da_nota(registro) -> bytes:
         caminho = banco().caminho(registro["arquivo_xml"])
@@ -271,6 +286,63 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
         if not caminho.is_file():
             abort(404)
         return send_file(caminho, mimetype="application/xml", as_attachment=True, download_name=caminho.name)
+
+    # ---- contas a pagar -----------------------------------------------------
+
+    @app.get("/pagar")
+    def pagar():
+        b = banco()
+        filtro = _filtro_titulos(request.args)
+        hoje = date.today()
+        lista = b.titulos(filtro)
+        datas = {"hoje": hoje.isoformat(), "ontem": (hoje - timedelta(days=1)).isoformat(),
+                 "em7": (hoje + timedelta(days=7)).isoformat(), "em30": (hoje + timedelta(days=30)).isoformat()}
+        return render_template("pagar.html", titulos=lista, resumo=b.resumo_titulos(hoje), filtro=filtro,
+                               datas=datas, total=round(sum(t["valor"] for t in lista), 2),
+                               args=request.args.to_dict(), hoje=hoje)
+
+    @app.get("/pagar.csv")
+    def pagar_csv():
+        texto = io.StringIO()
+        escrever_csv(texto, banco().titulos(_filtro_titulos(request.args)))
+        return send_file(io.BytesIO(texto.getvalue().encode("utf-8-sig")), mimetype="text/csv", as_attachment=True,
+                         download_name=f"contas-a-pagar-{datetime.now():%Y%m%d-%H%M}.csv")
+
+    @app.post("/pagar/acao")
+    def pagar_acao():
+        try:
+            ids = [int(i) for i in request.form.getlist("id")]
+        except ValueError:
+            abort(400)
+        if not ids:
+            flash("Selecione ao menos um título.", "erro")
+            return voltar()
+        b, acao = banco(), request.form.get("acao")
+        try:
+            if acao == "pagar":
+                em = date.fromisoformat(ler_data(request.form.get("data_pagamento") or date.today().isoformat(),
+                                                 "data do pagamento"))
+                flash(f"{b.marcar_pago(ids, em)} título(s) marcado(s) como pago(s).", "ok")
+            elif acao == "reabrir":
+                flash(f"{b.reabrir(ids)} título(s) reaberto(s).", "ok")
+            elif acao == "excluir":
+                flash(f"{b.excluir_titulos_manuais(ids)} lançamento(s) manual(is) excluído(s). "
+                      "Parcelas que vieram da nota não podem ser excluídas (use Reabrir/Cancelado).", "ok")
+            else:
+                abort(400)
+        except ErroTitulo as exc:
+            flash(str(exc), "erro")
+        return voltar()
+
+    @app.post("/nota/<chave>/titulo")
+    def adicionar_titulo(chave):
+        try:
+            banco().adicionar_titulo(chave, ler_data(request.form.get("vencimento", ""), "data de vencimento"),
+                                     ler_valor(request.form.get("valor", "")), request.form.get("observacao"))
+            flash("Parcela lançada.", "ok")
+        except ErroTitulo as exc:
+            flash(str(exc), "erro")
+        return voltar()
 
     @app.get("/certificado")
     def certificado():

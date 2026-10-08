@@ -2,9 +2,12 @@
 
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from lxml import etree
+
+from .titulos import ErroTitulo, FiltroTitulos, ResumoTitulos, classificar, ler_duplicatas
 from .xmlutil import NS, parse, texto
 
 SITUACAO_RESUMO = {"1": "autorizada", "2": "denegada", "3": "cancelada"}
@@ -33,6 +36,20 @@ CREATE TABLE IF NOT EXISTS notas (
     manifestado_em TEXT,
     atualizado_em TEXT
 );
+CREATE TABLE IF NOT EXISTS titulos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chave TEXT NOT NULL,
+    parcela TEXT NOT NULL,
+    vencimento TEXT NOT NULL,
+    valor REAL NOT NULL,
+    situacao TEXT NOT NULL DEFAULT 'aberto',
+    pago_em TEXT,
+    origem TEXT NOT NULL DEFAULT 'nota',
+    observacao TEXT,
+    atualizado_em TEXT,
+    UNIQUE (chave, parcela)
+);
+CREATE INDEX IF NOT EXISTS idx_titulos_vencimento ON titulos (situacao, vencimento);
 CREATE TABLE IF NOT EXISTS eventos (
     chave TEXT NOT NULL,
     tipo TEXT NOT NULL,
@@ -98,6 +115,31 @@ class Armazenamento:
         # WAL permite que a interface web leia enquanto uma sincronização grava.
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript(ESQUEMA)
+        self._migrar()
+        self._ler_titulos_pendentes()
+
+    def _migrar(self):
+        """Acrescenta colunas novas em bancos criados por versões anteriores."""
+        existentes = {linha["name"] for linha in self.db.execute("PRAGMA table_info(notas)")}
+        with self.db:
+            for coluna, tipo in (("numero", "TEXT"), ("serie", "TEXT"), ("titulos_lidos", "INTEGER DEFAULT 0")):
+                if coluna not in existentes:
+                    self.db.execute(f"ALTER TABLE notas ADD COLUMN {coluna} {tipo}")
+
+    def _ler_titulos_pendentes(self):
+        """Notas guardadas antes de existir o contas a pagar: lê as duplicatas dos XMLs que já estão no disco."""
+        pendentes = self.db.execute(
+            "SELECT chave, arquivo_xml FROM notas WHERE arquivo_xml IS NOT NULL AND COALESCE(titulos_lidos, 0) = 0"
+        ).fetchall()
+        for linha in pendentes:
+            try:
+                raiz = parse(self.caminho(linha["arquivo_xml"]).read_bytes())
+                inf = raiz.find(".//n:infNFe", namespaces=NS)
+                if inf is not None:
+                    self._atualizar_dados_da_nota(linha["chave"], inf)
+                    self._registrar_titulos(linha["chave"], inf)
+            except (OSError, etree.XMLSyntaxError, ValueError):
+                continue  # arquivo ausente ou corrompido: tenta de novo na próxima abertura
 
     def fechar(self):
         self.db.close()
@@ -190,6 +232,10 @@ class Armazenamento:
         chave = texto(raiz, ".//n:protNFe/n:infProt/n:chNFe") or (inf.get("Id", "")[3:] if inf is not None else "")
         arquivo = self._gravar(f"nfe/{self._pasta_mes(chave)}/{chave}-nfe.xml", xml)
         cstat = texto(raiz, ".//n:protNFe/n:infProt/n:cStat")
+        atual = self.nota(chave)
+        situacao = "autorizada" if cstat in ("100", "150") else ("denegada" if cstat else None)
+        if atual is not None and atual["situacao"] == "cancelada":
+            situacao = "cancelada"  # o cancelamento pode ter chegado antes do XML completo
         self._upsert_nota(
             chave,
             emitente_documento=texto(inf, "n:emit/n:CNPJ") or texto(inf, "n:emit/n:CPF"),
@@ -197,11 +243,99 @@ class Armazenamento:
             emissao=texto(inf, "n:ide/n:dhEmi") or texto(inf, "n:ide/n:dEmi"),
             valor=float(texto(inf, "n:total/n:ICMSTot/n:vNF") or 0),
             tipo_nf=texto(inf, "n:ide/n:tpNF"),
-            situacao="autorizada" if cstat in ("100", "150") else ("denegada" if cstat else None),
+            situacao=situacao,
             protocolo=texto(raiz, ".//n:protNFe/n:infProt/n:nProt"),
             arquivo_xml=arquivo,
+            numero=texto(inf, "n:ide/n:nNF"),
+            serie=texto(inf, "n:ide/n:serie"),
         )
+        self._registrar_titulos(chave, inf)
         return chave
+
+    def _atualizar_dados_da_nota(self, chave: str, inf):
+        self._upsert_nota(chave, numero=texto(inf, "n:ide/n:nNF"), serie=texto(inf, "n:ide/n:serie"))
+
+    # ---- contas a pagar -------------------------------------------------
+
+    def _registrar_titulos(self, chave: str, inf):
+        """Cria os títulos a pagar a partir das duplicatas, uma única vez por nota autorizada."""
+        nota = self.nota(chave)
+        with self.db:
+            if nota is not None and nota["situacao"] == "autorizada" and nota["manifestacao"] not in ("210220", "210240"):
+                agora = _agora().isoformat(timespec="seconds")
+                for dup in ler_duplicatas(inf):
+                    self.db.execute(
+                        "INSERT OR IGNORE INTO titulos (chave, parcela, vencimento, valor, origem, atualizado_em) "
+                        "VALUES (?, ?, ?, ?, 'nota', ?)", (chave, dup.parcela, dup.vencimento, dup.valor, agora))
+            self.db.execute("UPDATE notas SET titulos_lidos = 1 WHERE chave = ?", (chave,))
+
+    def _cancelar_titulos_abertos(self, chave: str):
+        with self.db:
+            self.db.execute("UPDATE titulos SET situacao = 'cancelado', atualizado_em = ? "
+                            "WHERE chave = ? AND situacao = 'aberto'", (_agora().isoformat(timespec="seconds"), chave))
+
+    def titulos(self, filtro: FiltroTitulos | None = None) -> list[sqlite3.Row]:
+        where, params = (filtro or FiltroTitulos()).sql()
+        return self.db.execute(
+            "SELECT t.*, n.emitente_nome, n.emitente_documento, n.numero, n.serie, n.valor AS valor_nota "
+            f"FROM titulos t LEFT JOIN notas n ON n.chave = t.chave {where} "
+            "ORDER BY t.vencimento, t.id", params).fetchall()
+
+    def titulos_por_chave(self, chave: str) -> list[sqlite3.Row]:
+        return self.db.execute(
+            "SELECT t.*, n.emitente_nome, n.emitente_documento, n.numero, n.serie, n.valor AS valor_nota "
+            "FROM titulos t LEFT JOIN notas n ON n.chave = t.chave WHERE t.chave = ? ORDER BY t.vencimento, t.id",
+            (chave,)).fetchall()
+
+    def resumo_titulos(self, hoje: date) -> ResumoTitulos:
+        resumo = ResumoTitulos()
+        for t in self.db.execute("SELECT vencimento, valor FROM titulos WHERE situacao = 'aberto'"):
+            faixas = {"vencido": [resumo.vencidos], "hoje": [resumo.hoje],
+                      "7dias": [resumo.proximos_7_dias], "30dias": [resumo.proximos_30_dias]}
+            for faixa in faixas.get(classificar(t["vencimento"], hoje), []) + [resumo.total_aberto]:
+                faixa.quantidade += 1
+                faixa.valor = round(faixa.valor + t["valor"], 2)
+        return resumo
+
+    def marcar_pago(self, ids: list[int], em: date) -> int:
+        return self._mudar_titulos(ids, "pago", em.isoformat(), "situacao = 'aberto'")
+
+    def reabrir(self, ids: list[int]) -> int:
+        return self._mudar_titulos(ids, "aberto", None, "situacao IN ('pago', 'cancelado')")
+
+    def _mudar_titulos(self, ids: list[int], situacao: str, pago_em: str | None, condicao: str) -> int:
+        if not ids:
+            return 0
+        with self.db:
+            cursor = self.db.execute(
+                f"UPDATE titulos SET situacao = ?, pago_em = ?, atualizado_em = ? "
+                f"WHERE id IN ({', '.join('?' * len(ids))}) AND {condicao}",
+                (situacao, pago_em, _agora().isoformat(timespec="seconds"), *ids))
+        return cursor.rowcount
+
+    def adicionar_titulo(self, chave: str, vencimento: str, valor: float, observacao: str | None = None) -> int:
+        """Lança uma parcela à mão (nota paga à vista, sem duplicatas, ou parcela que faltou)."""
+        if self.nota(chave) is None:
+            raise ErroTitulo("Nota não encontrada.")
+        usadas = {t["parcela"] for t in self.titulos_por_chave(chave)}
+        numero = 1
+        while f"M{numero}" in usadas:
+            numero += 1
+        with self.db:
+            cursor = self.db.execute(
+                "INSERT INTO titulos (chave, parcela, vencimento, valor, origem, observacao, atualizado_em) "
+                "VALUES (?, ?, ?, ?, 'manual', ?, ?)",
+                (chave, f"M{numero}", vencimento, valor, (observacao or "").strip() or None,
+                 _agora().isoformat(timespec="seconds")))
+        return cursor.lastrowid
+
+    def excluir_titulos_manuais(self, ids: list[int]) -> int:
+        if not ids:
+            return 0
+        with self.db:
+            cursor = self.db.execute(
+                f"DELETE FROM titulos WHERE origem = 'manual' AND id IN ({', '.join('?' * len(ids))})", ids)
+        return cursor.rowcount
 
     def _guardar_evento(self, raiz, xml: bytes, resumo: bool) -> str:
         base = raiz if resumo else raiz.find(".//n:evento/n:infEvento", namespaces=NS)
@@ -225,12 +359,15 @@ class Armazenamento:
                 )
         if tipo in ("110111", "110112"):  # cancelamento
             self._upsert_nota(chave, situacao="cancelada")
+            self._cancelar_titulos_abertos(chave)
         return chave
 
     # ---- manifestação ---------------------------------------------------
 
     def registrar_manifestacao(self, chave: str, tipo_evento: str):
         self._upsert_nota(chave, manifestacao=tipo_evento, manifestado_em=_agora().isoformat(timespec="seconds"))
+        if tipo_evento in ("210220", "210240"):  # desconhecimento / operação não realizada: nada a pagar
+            self._cancelar_titulos_abertos(chave)
 
     def chaves_sem_manifestacao(self) -> list[str]:
         linhas = self.db.execute(

@@ -57,6 +57,38 @@
 </div>
 
 <section class="caixa">
+  <h2>Contas a pagar desta nota</h2>
+  {% if titulos %}
+  <table class="tabela">
+    <thead><tr><th>Parcela</th><th>Vencimento</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+    {% for t in titulos %}
+      <tr>
+        <td>{{ t.parcela }} {% if t.origem == 'manual' %}<span class="muted pequeno">(lançada à mão)</span>{% endif %}
+            {% if t.observacao %}<span class="muted pequeno">· {{ t.observacao }}</span>{% endif %}</td>
+        <td class="{{ 'vencido' if t.situacao == 'aberto' and faixa_vencimento(t.vencimento) == 'vencido' }}">{{ t.vencimento | data }}</td>
+        <td class="num">{{ t.valor | moeda }}</td>
+        <td><span class="selo selo-{{ {'aberto': 'aviso', 'pago': 'ok', 'cancelado': 'erro'}[t.situacao] }}">{{ t.situacao | capitalize }}{% if t.pago_em %} em {{ t.pago_em | data }}{% endif %}</span></td>
+        <td></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p><a href="{{ url_for('pagar', situacao='', q=nota.numero or nota.chave) }}">Ver na lista de contas a pagar</a></p>
+  {% else %}
+  <p class="muted">Esta nota não trouxe parcelas (duplicatas), por exemplo porque foi paga à vista. Se houver algo a pagar, lance abaixo.</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('adicionar_titulo', chave=nota.chave) }}" class="linha-formulario">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="voltar" value="{{ request.path }}">
+    <label>Vencimento <input type="date" name="vencimento" required></label>
+    <label>Valor (R$) <input type="text" name="valor" inputmode="decimal" placeholder="1.234,56" required></label>
+    <label class="cresce">Observação <input type="text" name="observacao" maxlength="120" placeholder="opcional"></label>
+    <button class="botao">Lançar parcela</button>
+  </form>
+</section>
+
+<section class="caixa">
   <h2>Eventos</h2>
   {% if eventos %}
   <table class="tabela">

@@ -47,6 +47,36 @@ def cmd_manifestar(cfg: Config, args):
         operacoes.manifestar(sinc, print, chaves, args.evento, args.justificativa)
 
 
+def cmd_contas(cfg: Config, args):
+    from datetime import date
+
+    from .titulos import FiltroTitulos, classificar, escrever_csv
+
+    banco = Armazenamento(cfg.pasta_dados)
+    try:
+        titulos = banco.titulos(FiltroTitulos(situacao="" if args.todas else "aberto"))
+        resumo = banco.resumo_titulos(date.today())
+    finally:
+        banco.fechar()
+
+    if args.csv:
+        with open(args.csv, "w", newline="", encoding="utf-8-sig") as arquivo:
+            escrever_csv(arquivo, titulos)
+        print(f"{len(titulos)} título(s) exportado(s) para {args.csv}")
+        return
+    if not titulos:
+        print("Nenhuma conta a pagar. As parcelas aparecem quando o XML completo das notas é baixado.")
+        return
+    marcas = {"vencido": "VENCIDO", "hoje": "HOJE"}
+    print(f"{'Vencimento':10}  {'Fornecedor':28}  {'Nota':>8}  {'Parc.':5}  {'Valor':>12}  Situação")
+    for t in titulos:
+        marca = marcas.get(classificar(t["vencimento"], date.today()), "") if t["situacao"] == "aberto" else ""
+        print(f"{date.fromisoformat(t['vencimento']):%d/%m/%Y}  {(t['emitente_nome'] or '')[:28]:28}  "
+              f"{t['numero'] or '':>8}  {t['parcela'][:5]:5}  {t['valor']:>12,.2f}  {t['situacao']} {marca}".rstrip())
+    print(f"\nVencidos: {resumo.vencidos.quantidade} ({resumo.vencidos.valor:,.2f})  |  "
+          f"Em aberto: {resumo.total_aberto.quantidade} ({resumo.total_aberto.valor:,.2f})")
+
+
 def cmd_testar_conexao(cfg: Config, args):
     with _sessao(cfg) as sinc:
         operacoes.testar_conexao(sinc, print)
@@ -144,6 +174,11 @@ def criar_parser() -> argparse.ArgumentParser:
     p = subs.add_parser("baixar", help="baixa o XML de notas específicas pela chave de acesso")
     p.add_argument("chaves", nargs="*", help="chave(s) de acesso; sem chaves, usa as notas já manifestadas sem XML")
     p.set_defaults(func=cmd_baixar)
+
+    p = subs.add_parser("contas", help="lista as contas a pagar (parcelas das notas de compra)")
+    p.add_argument("--todas", action="store_true", help="inclui pagas e canceladas")
+    p.add_argument("--csv", metavar="ARQUIVO", help="exporta para CSV (abre no Excel)")
+    p.set_defaults(func=cmd_contas)
 
     p = subs.add_parser("danfe", help="gera o DANFE em PDF de notas já baixadas")
     p.add_argument("chaves", nargs="+", help="chave(s) de acesso de 44 dígitos")

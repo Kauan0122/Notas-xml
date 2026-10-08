@@ -149,6 +149,8 @@ Abre o navegador em <http://127.0.0.1:8000> com:
 - **Sincronizar agora** (com opção de dar ciência nas notas novas) e um painel que mostra o andamento ao vivo;
 - **Manifestação em lote**: marque as notas, escolha o evento e clique em *Manifestar*;
 - **Download** do XML de cada nota, de um **ZIP** com as selecionadas/filtradas e exportação **CSV**;
+- **Contas a pagar**: as parcelas (duplicatas) das notas de compra viram uma agenda, com vencidos, vencimentos de
+  hoje e dos próximos dias, aviso no menu, filtros, "marcar como pago", "reabrir" e exportação CSV (veja abaixo);
 - **DANFE em PDF**: botão "DANFE" em cada nota (abre no navegador) e "DANFEs selecionados (ZIP)" para várias de uma vez;
 - Página de cada nota com dados, eventos (cancelamento, carta de correção...) e seus XMLs;
 - **Sincronização automática** de hora em hora enquanto o sistema estiver aberto (`[web] sincronizacao_automatica`).
@@ -187,6 +189,9 @@ notaxml baixar
 # Testa a conexão segura com a SEFAZ (sem consultar notas)
 notaxml testar-conexao
 
+# Contas a pagar (parcelas das notas); --todas inclui pagas; --csv exporta
+notaxml contas
+
 # DANFE em PDF de notas já baixadas
 notaxml danfe 3526...0001 -o pdfs
 
@@ -203,6 +208,19 @@ Agende `notaxml sincronizar --ciencia-automatica` para rodar **de hora em hora**
 - **Linux (cron):** `0 * * * * cd /caminho/do/projeto && NFE_CERT_SENHA=... .venv/bin/notaxml sincronizar --ciencia-automatica >> sync.log 2>&1`
 - **Windows:** Agendador de Tarefas, executando `.venv\Scripts\notaxml.exe sincronizar --ciencia-automatica`
   com "Iniciar em" apontando para a pasta do projeto.
+
+## Contas a pagar
+
+Quando o XML completo de uma nota é baixado, o sistema lê as **duplicatas** (parcelas e vencimentos) e cria
+os títulos a pagar. Notas antigas, baixadas antes desse recurso, são lidas sozinhas na primeira abertura.
+
+- **Cancelamento:** se a nota for cancelada, os títulos **em aberto** são cancelados; os já pagos ficam como estão.
+- **Desconhecimento / operação não realizada:** os títulos em aberto também saem da conta (dá para reabrir).
+- **Nota paga à vista** (sem duplicatas): não gera parcela. Na página da nota há **Lançar parcela** para criar
+  uma à mão (vencimento, valor e observação). Só esses lançamentos manuais podem ser excluídos.
+- **Marcar como pago** é só um controle interno: o NotaXML **não paga nem concilia boletos**.
+- **Exportar CSV** (separador `;`, valores com vírgula) abre no Excel e pode servir de base para importar em outro
+  sistema, como o Bling. O envio automático ao Bling ainda não existe.
 
 ## Sobre o DANFE
 

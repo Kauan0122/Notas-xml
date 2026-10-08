@@ -221,3 +221,13 @@ details label { display: grid; gap: .3rem; }
 .bloco-rede label:not(.check) { display: grid; gap: .3rem; }
 .bloco-rede p { margin: 0; }
 .rodape { text-align: center; color: var(--texto-suave); font-size: .8rem; padding: 0 16px 1.5rem; }
+
+.contador { background: var(--erro-texto); color: var(--superficie); border-radius: 999px; font-size: .72rem;
+  font-weight: 700; padding: .05rem .4rem; margin-left: .25rem; }
+.vencido { color: var(--erro-texto); font-weight: 600; }
+.linha-formulario { display: flex; gap: .6rem; align-items: end; flex-wrap: wrap; margin-top: .75rem; }
+.linha-formulario label { display: grid; gap: .25rem; font-size: .88rem; color: var(--texto-suave); }
+.linha-formulario .cresce { flex: 1 1 200px; }
+.cartao-erro { border-color: var(--erro-texto); }
+.cartao-erro .valor { color: var(--erro-texto); }
+.cartao .detalhe { font-size: .82rem; color: var(--texto-suave); }
