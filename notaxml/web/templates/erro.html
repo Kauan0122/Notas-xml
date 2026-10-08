@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block titulo %}Erro{% endblock %}
+{% block conteudo %}
+<section class="caixa estreita centralizada">
+  <h1>{{ 'Página não encontrada' if erro.code == 404 else 'Não foi possível concluir' }}</h1>
+  <p>{{ erro.description }}</p>
+  <p><a href="{{ url_for('notas') }}">Voltar para as notas</a></p>
+</section>
+{% endblock %}

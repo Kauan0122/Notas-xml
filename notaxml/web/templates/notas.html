@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="cabecalho-pagina">
+  <div>
+    <h1>Notas recebidas</h1>
+    <p class="muted">
+      {% if estado.proxima_consulta %}
+        Última posição na SEFAZ: NSU {{ estado.ult_nsu | int }}{% if estado.max_nsu %} de {{ estado.max_nsu | int }}{% endif %}.
+        Próxima consulta liberada a partir de {{ estado.proxima_consulta.isoformat() | data_hora }}.
+      {% else %}
+        Nenhuma sincronização feita ainda.
+      {% endif %}
+      {% if cfg.web.sincronizacao_automatica %}Sincronização automática ligada.{% endif %}
+    </p>
+  </div>
+  <form method="post" action="{{ url_for('acao_sincronizar') }}" class="form-sincronizar">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="voltar" value="{{ request.full_path }}">
+    <label class="check"><input type="checkbox" name="ciencia" value="1" {{ 'checked' if cfg.ciencia_automatica }}> Dar ciência nas novas</label>
+    <button class="botao primario" {{ 'disabled' if not tarefas.certificado or tarefas.ocupado }}>Sincronizar agora</button>
+  </form>
+</div>
+
+<div class="cartoes">
+  <div class="cartao"><span class="rotulo">Notas</span><span class="valor">{{ geral.quantidade }}</span></div>
+  <div class="cartao"><span class="rotulo">Valor total</span><span class="valor">{{ geral.valor | moeda }}</span></div>
+  <a class="cartao {{ 'cartao-alerta' if geral.sem_manifestacao }}" href="{{ url_for('notas', pendencia='sem_manifestacao') }}">
+    <span class="rotulo">Aguardando manifestação</span><span class="valor">{{ geral.sem_manifestacao or 0 }}</span></a>
+  <a class="cartao" href="{{ url_for('notas', pendencia='sem_xml') }}">
+    <span class="rotulo">Sem XML completo</span><span class="valor">{{ geral.sem_xml or 0 }}</span></a>
+</div>
+
+<form method="get" class="filtros">
+  <input type="search" name="q" value="{{ filtro.texto }}" placeholder="Emitente, CNPJ ou chave">
+  <label>De <input type="date" name="de" value="{{ filtro.inicio }}"></label>
+  <label>Até <input type="date" name="ate" value="{{ filtro.fim }}"></label>
+  <select name="situacao">
+    <option value="">Todas as situações</option>
+    {% for s in ['autorizada', 'cancelada', 'denegada'] %}
+      <option value="{{ s }}" {{ 'selected' if filtro.situacao == s }}>{{ s | capitalize }}</option>
+    {% endfor %}
+  </select>
+  <select name="pendencia">
+    <option value="">Todas</option>
+    <option value="sem_manifestacao" {{ 'selected' if filtro.pendencia == 'sem_manifestacao' }}>Aguardando manifestação</option>
+    <option value="sem_xml" {{ 'selected' if filtro.pendencia == 'sem_xml' }}>Sem XML completo</option>
+  </select>
+  <button class="botao">Filtrar</button>
+  {% if args %}<a href="{{ url_for('notas') }}" class="botao fantasma">Limpar</a>{% endif %}
+  <span class="espaco"></span>
+  {% set export_args = args.copy() %}{% set _ = export_args.pop('pagina', None) %}
+  <a class="botao fantasma" href="{{ url_for('exportar_csv', **export_args) }}">Exportar CSV</a>
+  <a class="botao fantasma" href="{{ url_for('exportar_zip', **export_args) }}">Baixar XMLs (ZIP)</a>
+</form>
+
+<form method="post" action="{{ url_for('acao_selecionadas') }}" id="form-notas">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <input type="hidden" name="voltar" value="{{ request.full_path }}">
+
+  <div class="barra-acoes" id="barra-acoes">
+    <span><strong id="qtd-selecionadas">0</strong> selecionada(s)</span>
+    <select name="evento" id="evento">
+      {% for valor, rotulo in eventos_manifestacao.items() %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+    </select>
+    <input type="text" name="justificativa" id="justificativa" class="oculto" maxlength="255"
+           placeholder="Justificativa (15 a 255 caracteres)">
+    <button class="botao primario" name="acao" value="manifestar" {{ 'disabled' if not tarefas.certificado }}>Manifestar</button>
+    <button class="botao" name="acao" value="baixar" {{ 'disabled' if not tarefas.certificado }}>Buscar XML na SEFAZ</button>
+    <button class="botao" name="acao" value="zip">Baixar ZIP</button>
+  </div>
+
+  <div class="tabela-rolagem">
+  <table class="tabela tabela-notas">
+    <thead>
+      <tr>
+        <th class="col-check"><input type="checkbox" id="marcar-todas" aria-label="Selecionar todas"></th>
+        <th>Emissão</th>
+        <th>Emitente</th>
+        <th class="num">Valor</th>
+        <th>Situação</th>
+        <th>Manifestação</th>
+        <th>XML</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for n in notas %}
+      <tr>
+        <td class="col-check c-check"><input type="checkbox" name="chave" value="{{ n.chave }}" class="marcar"></td>
+        <td class="nowrap c-data">{{ n.emissao | data }}</td>
+        <td class="c-emit">
+          <a href="{{ url_for('nota', chave=n.chave) }}" class="emitente">{{ n.emitente_nome or 'Emitente não informado' }}</a>
+          <span class="muted pequeno">{{ n.emitente_documento | documento }}</span>
+        </td>
+        <td class="num nowrap c-valor">{{ n.valor | moeda }}</td>
+        <td class="c-sit"><span class="selo selo-{{ {'autorizada': 'ok', 'cancelada': 'erro', 'denegada': 'erro'}.get(n.situacao, 'neutro') }}">{{ (n.situacao or '—') | capitalize }}</span></td>
+        <td class="c-man">
+          {% if n.manifestacao %}{{ n.manifestacao | evento }}
+          {% elif n.arquivo_xml %}<span class="muted c-vazio">—</span>
+          {% else %}<span class="selo selo-aviso">Pendente</span>{% endif %}
+        </td>
+        <td class="nowrap c-xml">
+          {% if n.arquivo_xml %}<a href="{{ url_for('baixar_arquivo', chave=n.chave, tipo='nfe') }}">Baixar</a>
+          {% else %}<span class="muted">só resumo</span>{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="vazio">
+        {% if args %}Nenhuma nota com esses filtros.
+        {% else %}Nenhuma nota ainda. Clique em <strong>Sincronizar agora</strong> para buscar na SEFAZ.{% endif %}
+      </td></tr>
+    {% endfor %}
+    </tbody>
+    {% if notas %}
+    <tfoot>
+      <tr><td></td><td colspan="2">{{ totais.quantidade }} nota(s) no filtro</td>
+        <td class="num nowrap">{{ totais.valor | moeda }}</td><td colspan="3"></td></tr>
+    </tfoot>
+    {% endif %}
+  </table>
+  </div>
+</form>
+
+{% if paginas > 1 %}
+<nav class="paginacao">
+  {% if pagina > 1 %}{% set a = args.copy() %}{% set _ = a.update({'pagina': pagina - 1}) %}<a class="botao fantasma" href="{{ url_for('notas', **a) }}">← Anterior</a>{% endif %}
+  <span>Página {{ pagina }} de {{ paginas }}</span>
+  {% if pagina < paginas %}{% set a = args.copy() %}{% set _ = a.update({'pagina': pagina + 1}) %}<a class="botao fantasma" href="{{ url_for('notas', **a) }}">Próxima →</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

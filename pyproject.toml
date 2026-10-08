@@ -12,6 +12,8 @@ dependencies = [
     "requests>=2.31",
     "lxml>=4.9",
     "cryptography>=42",
+    "flask>=3.0",
+    "waitress>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -21,4 +23,7 @@ dev = ["pytest>=7"]
 notaxml = "notaxml.cli:main"
 
 [tool.setuptools]
-packages = ["notaxml"]
+packages = ["notaxml", "notaxml.web"]
+
+[tool.setuptools.package-data]
+"notaxml.web" = ["templates/*.html", "static/*"]

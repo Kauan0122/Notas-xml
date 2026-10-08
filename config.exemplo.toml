@@ -22,3 +22,13 @@ pasta = "dados"                   # XMLs e o banco notas.db ficam aqui
 [sincronizacao]
 # Envia "Ciência da Operação" automaticamente para cada nota nova, o que libera o download do XML completo.
 ciencia_automatica = false
+
+[web]
+# Interface no navegador: rode "notaxml web" e acesse http://127.0.0.1:8000
+host = "127.0.0.1"                # use "0.0.0.0" para acessar de outros computadores da rede
+porta = 8000
+# Senha de acesso à interface. Obrigatória se o host não for 127.0.0.1.
+# Recomendado: variável de ambiente NOTAXML_WEB_SENHA.
+# senha = ""
+sincronizacao_automatica = true   # a interface sincroniza sozinha enquanto estiver aberta
+intervalo_minutos = 60            # mínimo 60 (regra da SEFAZ)

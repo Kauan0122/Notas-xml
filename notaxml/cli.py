@@ -1,25 +1,15 @@
 import argparse
-import csv
 import getpass
-import re
 import sys
 from contextlib import contextmanager
 
+from . import operacoes
 from .armazenamento import Armazenamento
 from .certificado import Certificado
 from .config import Config, carregar_config
-from .distribuicao import DistribuicaoDFe
 from .erros import ErroNotaXML
-from .manifestacao import DESCRICAO_EVENTO, EVENTOS, Manifestacao
-from .sincronizador import Sincronizador
-from .soap import ClienteSefaz
-
-TIPOS_DOCUMENTO = {
-    "resNFe": "resumos de NF-e",
-    "procNFe": "NF-e completas (XML)",
-    "resEvento": "resumos de eventos",
-    "procEventoNFe": "eventos",
-}
+from .manifestacao import EVENTOS
+from .operacoes import validar_chaves
 
 
 def _carregar_certificado(cfg: Config) -> Certificado:
@@ -32,31 +22,8 @@ def _carregar_certificado(cfg: Config) -> Certificado:
 
 @contextmanager
 def _sessao(cfg: Config):
-    cert = _carregar_certificado(cfg)
-    banco = Armazenamento(cfg.pasta_dados)
-    try:
-        with ClienteSefaz(cert, cfg.verificar_ssl, cfg.timeout) as cliente:
-            yield Sincronizador(
-                DistribuicaoDFe(cliente, cfg.ambiente, cfg.cuf, cfg.documento),
-                banco,
-                Manifestacao(cliente, cert, cfg.ambiente, cfg.documento),
-            )
-    finally:
-        banco.fechar()
-
-
-def _validar_chaves(chaves: list[str]) -> list[str]:
-    limpas = [re.sub(r"\D", "", c) for c in chaves]
-    invalidas = [c for c in limpas if len(c) != 44]
-    if invalidas:
-        raise ErroNotaXML(f"Chave(s) de acesso inválida(s) (precisam de 44 dígitos): {', '.join(invalidas)}")
-    return limpas
-
-
-def _mostrar_manifestacao(resultados):
-    for r in resultados:
-        marca = "OK  " if r.sucesso else "ERRO"
-        print(f"  [{marca}] {r.chave}: {r.cstat} - {r.motivo}")
+    with operacoes.abrir_sincronizador(cfg, _carregar_certificado(cfg)) as sinc:
+        yield sinc
 
 
 def cmd_certificado(cfg: Config, args):
@@ -69,50 +36,20 @@ def cmd_certificado(cfg: Config, args):
 
 
 def cmd_sincronizar(cfg: Config, args):
-    ciencia = args.ciencia_automatica or cfg.ciencia_automatica
     with _sessao(cfg) as sinc:
-        print("Consultando documentos novos na SEFAZ...")
-        resumo = sinc.sincronizar(forcar=args.forcar)
-        if resumo.bloqueado:
-            print(f"Nada a fazer: a SEFAZ pede 1 hora de intervalo após alcançar o último NSU. "
-                  f"Próxima consulta liberada em {resumo.proxima_consulta.astimezone():%d/%m/%Y %H:%M}. "
-                  "(use --forcar por sua conta e risco)")
-        else:
-            print(f"Concluído: {resumo.consultas} consulta(s), último NSU {resumo.ult_nsu}.")
-            for tipo, qtd in resumo.documentos.items():
-                print(f"  {qtd} {TIPOS_DOCUMENTO.get(tipo, tipo)}")
-            if not resumo.total:
-                print("  Nenhum documento novo.")
-
-        if ciencia:
-            pendentes = sinc.banco.chaves_sem_manifestacao()
-            if pendentes:
-                print(f"Enviando Ciência da Operação para {len(pendentes)} nota(s)...")
-                _mostrar_manifestacao(sinc.manifestar(pendentes, "ciencia"))
-                print("O XML completo dessas notas chegará nas próximas sincronizações "
-                      "(ou use 'notaxml baixar --pendentes').")
+        operacoes.sincronizar(sinc, print, ciencia=args.ciencia_automatica or cfg.ciencia_automatica,
+                              forcar=args.forcar)
 
 
 def cmd_manifestar(cfg: Config, args):
-    chaves = _validar_chaves(args.chaves)
+    chaves = validar_chaves(args.chaves)
     with _sessao(cfg) as sinc:
-        _mostrar_manifestacao(sinc.manifestar(chaves, args.evento, args.justificativa))
+        operacoes.manifestar(sinc, print, chaves, args.evento, args.justificativa)
 
 
 def cmd_baixar(cfg: Config, args):
     with _sessao(cfg) as sinc:
-        chaves = _validar_chaves(args.chaves) if args.chaves else sinc.banco.chaves_aguardando_xml()
-        if not chaves:
-            print("Nenhuma nota aguardando XML.")
-            return
-        for chave in chaves:
-            try:
-                ok = sinc.baixar_por_chave(chave)
-                print(f"  {chave}: {'XML completo baixado' if ok else 'apenas resumo disponível (manifeste a nota)'}")
-            except ErroNotaXML as exc:
-                print(f"  {chave}: {exc}")
-                if getattr(exc, "cstat", None) == "656":
-                    break
+        operacoes.baixar(sinc, print, validar_chaves(args.chaves) if args.chaves else None)
 
 
 def cmd_listar(cfg: Config, args):
@@ -124,13 +61,7 @@ def cmd_listar(cfg: Config, args):
 
     if args.csv:
         with open(args.csv, "w", newline="", encoding="utf-8-sig") as arquivo:
-            escritor = csv.writer(arquivo, delimiter=";")
-            escritor.writerow(["chave", "emissao", "emitente_cnpj", "emitente", "valor", "situacao",
-                               "manifestacao", "xml"])
-            for n in notas:
-                escritor.writerow([n["chave"], n["emissao"], n["emitente_documento"], n["emitente_nome"],
-                                   f"{n['valor'] or 0:.2f}".replace(".", ","), n["situacao"],
-                                   DESCRICAO_EVENTO.get(n["manifestacao"] or "", ""), n["arquivo_xml"] or ""])
+            operacoes.escrever_csv(arquivo, notas)
         print(f"{len(notas)} nota(s) exportada(s) para {args.csv}")
         return
 
@@ -143,6 +74,40 @@ def cmd_listar(cfg: Config, args):
               f"{n['valor'] or 0:>13,.2f}  {(n['situacao'] or '')[:10]:10}  "
               f"{'sim' if n['arquivo_xml'] else 'não':3}  {n['chave']}")
     print(f"\n{len(notas)} nota(s). XMLs em: {cfg.pasta_dados / 'xml'}")
+
+
+def cmd_web(cfg: Config, args):
+    import ipaddress
+    import threading
+    import webbrowser
+
+    from waitress import serve
+
+    from .web import criar_app
+
+    host = args.host or cfg.web.host
+    porta = args.porta or cfg.web.porta
+    try:
+        local = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        local = host == "localhost"
+    if not local and not cfg.web.senha:
+        raise ErroNotaXML("Para abrir a interface na rede (host diferente de 127.0.0.1), defina uma senha de "
+                          "acesso em [web] senha ou na variável NOTAXML_WEB_SENHA.")
+
+    app = criar_app(cfg)
+    tarefas = app.extensions["notaxml_tarefas"]
+    if cfg.web.sincronizacao_automatica:
+        tarefas.verificar_agenda()
+        tarefas.iniciar_agendador()
+
+    endereco = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{porta}"
+    print(f"NotaXML rodando em {endereco}  (Ctrl+C para encerrar)")
+    if tarefas.certificado is None:
+        print("Certificado bloqueado: informe a senha na tela 'Certificado' ou defina NFE_CERT_SENHA.")
+    if not args.sem_navegador:
+        threading.Timer(1.0, webbrowser.open, args=(endereco,)).start()
+    serve(app, host=host, port=porta, threads=8, ident="notaxml")
 
 
 def criar_parser() -> argparse.ArgumentParser:
@@ -172,6 +137,12 @@ def criar_parser() -> argparse.ArgumentParser:
     p.add_argument("--pendentes", action="store_true", help="somente notas sem XML completo")
     p.add_argument("--csv", metavar="ARQUIVO", help="exporta a lista para CSV (abre no Excel)")
     p.set_defaults(func=cmd_listar)
+
+    p = subs.add_parser("web", help="abre a interface no navegador")
+    p.add_argument("--host", help="endereço (padrão: [web] host do config, 127.0.0.1)")
+    p.add_argument("--porta", type=int, help="porta (padrão: [web] porta do config, 8000)")
+    p.add_argument("--sem-navegador", action="store_true", help="não abre o navegador automaticamente")
+    p.set_defaults(func=cmd_web)
     return parser
 
 

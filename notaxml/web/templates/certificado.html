@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titulo %}Certificado{% endblock %}
+{% block conteudo %}
+<h1>Certificado digital</h1>
+<section class="caixa estreita">
+  {% if cert %}
+  <dl>
+    <dt>Titular</dt><dd>{{ cert.titular }}</dd>
+    <dt>CNPJ</dt><dd>{{ (cert.cnpj or '') | documento or '(não identificado)' }}</dd>
+    <dt>Válido até</dt><dd>{{ cert.valido_ate.strftime('%d/%m/%Y') }}</dd>
+    <dt>Arquivo</dt><dd class="mono">{{ cfg.certificado }}</dd>
+  </dl>
+  {% if cert.cnpj and cert.cnpj[:8] != cfg.documento[:8] %}
+    <div class="aviso aviso-erro">O CNPJ do certificado é de outra empresa (raiz diferente da configurada: {{ cfg.documento | documento }}).</div>
+  {% endif %}
+  {% else %}
+  <p>Para acessar a SEFAZ, informe a senha do certificado A1 <span class="mono">{{ cfg.certificado.name }}</span>.
+     A senha fica apenas na memória enquanto o sistema estiver aberto.</p>
+  {% if tarefas.erro_certificado %}<div class="aviso aviso-erro">{{ tarefas.erro_certificado }}</div>{% endif %}
+  <form method="post" class="form-empilhado">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label>Senha do certificado <input type="password" name="senha" autocomplete="off" autofocus required></label>
+    <button class="botao primario">Desbloquear</button>
+  </form>
+  <p class="muted pequeno">Dica: definindo a variável de ambiente NFE_CERT_SENHA, o certificado é desbloqueado ao iniciar.</p>
+  {% endif %}
+</section>
+{% endblock %}

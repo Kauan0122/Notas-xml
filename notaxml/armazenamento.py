@@ -1,7 +1,7 @@
 """Arquivos XML no disco + índice SQLite das notas e do controle de NSU."""
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -55,13 +55,48 @@ class Estado:
     proxima_consulta: datetime | None
 
 
+@dataclass
+class Filtro:
+    texto: str = ""  # trecho do nome/CNPJ do emitente ou da chave
+    situacao: str = ""  # autorizada, cancelada, denegada
+    pendencia: str = ""  # sem_xml, sem_manifestacao
+    inicio: str = ""  # AAAA-MM-DD (emissão)
+    fim: str = ""
+    chaves: list[str] = field(default_factory=list)
+
+    def sql(self) -> tuple[str, list]:
+        condicoes, params = [], []
+        if self.texto:
+            condicoes.append("(emitente_nome LIKE ? OR emitente_documento LIKE ? OR chave LIKE ?)")
+            params += [f"%{self.texto}%"] * 3
+        if self.situacao:
+            condicoes.append("situacao = ?")
+            params.append(self.situacao)
+        if self.pendencia == "sem_xml":
+            condicoes.append("arquivo_xml IS NULL")
+        elif self.pendencia == "sem_manifestacao":
+            condicoes.append("manifestacao IS NULL AND arquivo_xml IS NULL")
+        if self.inicio:
+            condicoes.append("substr(emissao, 1, 10) >= ?")
+            params.append(self.inicio)
+        if self.fim:
+            condicoes.append("substr(emissao, 1, 10) <= ?")
+            params.append(self.fim)
+        if self.chaves:
+            condicoes.append(f"chave IN ({', '.join('?' * len(self.chaves))})")
+            params += self.chaves
+        return ("WHERE " + " AND ".join(condicoes)) if condicoes else "", params
+
+
 class Armazenamento:
     def __init__(self, pasta: str | Path):
         self.pasta = Path(pasta)
         self.pasta_xml = self.pasta / "xml"
         self.pasta.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.pasta / "notas.db")
+        self.db = sqlite3.connect(self.pasta / "notas.db", timeout=30)
         self.db.row_factory = sqlite3.Row
+        # WAL permite que a interface web leia enquanto uma sincronização grava.
+        self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript(ESQUEMA)
 
     def fechar(self):
@@ -214,3 +249,42 @@ class Armazenamento:
     def listar(self, somente_pendentes: bool = False) -> list[sqlite3.Row]:
         filtro = "WHERE arquivo_xml IS NULL" if somente_pendentes else ""
         return self.db.execute(f"SELECT * FROM notas {filtro} ORDER BY emissao DESC").fetchall()
+
+    def buscar(self, filtro: Filtro, limite: int | None = None, deslocamento: int = 0) -> list[sqlite3.Row]:
+        where, params = filtro.sql()
+        sql = f"SELECT * FROM notas {where} ORDER BY emissao DESC, chave"
+        if limite is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params += [limite, deslocamento]
+        return self.db.execute(sql, params).fetchall()
+
+    def totais(self, filtro: Filtro) -> sqlite3.Row:
+        where, params = filtro.sql()
+        return self.db.execute(
+            f"""SELECT COUNT(*) AS quantidade, COALESCE(SUM(valor), 0) AS valor,
+                       SUM(arquivo_xml IS NULL) AS sem_xml,
+                       SUM(manifestacao IS NULL AND arquivo_xml IS NULL
+                           AND COALESCE(situacao, '') NOT IN ('cancelada', 'denegada')) AS sem_manifestacao
+                FROM notas {where}""",
+            params,
+        ).fetchone()
+
+    def nota(self, chave: str) -> sqlite3.Row | None:
+        return self.db.execute("SELECT * FROM notas WHERE chave = ?", (chave,)).fetchone()
+
+    def eventos(self, chave: str) -> list[sqlite3.Row]:
+        return self.db.execute(
+            "SELECT * FROM eventos WHERE chave = ? ORDER BY tipo, sequencia", (chave,)
+        ).fetchall()
+
+    def evento(self, chave: str, tipo: str, sequencia: int) -> sqlite3.Row | None:
+        return self.db.execute(
+            "SELECT * FROM eventos WHERE chave = ? AND tipo = ? AND sequencia = ?", (chave, tipo, sequencia)
+        ).fetchone()
+
+    def caminho(self, relativo: str) -> Path:
+        """Caminho absoluto de um arquivo registrado no banco (sempre dentro da pasta de dados)."""
+        destino = (self.pasta / relativo).resolve()
+        if not destino.is_relative_to(self.pasta.resolve()):
+            raise ValueError("Caminho fora da pasta de dados.")
+        return destino

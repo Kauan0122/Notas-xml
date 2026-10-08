@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block titulo %}{{ nota.emitente_nome or nota.chave }}{% endblock %}
+{% block conteudo %}
+<p><a href="{{ url_for('notas') }}">← Voltar para as notas</a></p>
+<div class="cabecalho-pagina">
+  <div>
+    <h1>{{ nota.emitente_nome or 'Emitente não informado' }}</h1>
+    <p class="muted">{{ nota.emitente_documento | documento }}</p>
+  </div>
+  <div class="valor-destaque">{{ nota.valor | moeda }}</div>
+</div>
+
+<div class="grade-detalhes">
+  <section class="caixa">
+    <h2>Dados da nota</h2>
+    <dl>
+      <dt>Chave de acesso</dt><dd class="mono">{{ nota.chave | chave }}</dd>
+      <dt>Emissão</dt><dd>{{ nota.emissao | data_hora }}</dd>
+      <dt>Tipo</dt><dd>{{ {'0': 'Entrada', '1': 'Saída'}.get(nota.tipo_nf, '—') }} (do ponto de vista do emitente)</dd>
+      <dt>Situação</dt><dd><span class="selo selo-{{ {'autorizada': 'ok', 'cancelada': 'erro', 'denegada': 'erro'}.get(nota.situacao, 'neutro') }}">{{ (nota.situacao or '—') | capitalize }}</span></dd>
+      <dt>Protocolo</dt><dd class="mono">{{ nota.protocolo or '—' }}</dd>
+      <dt>Manifestação</dt><dd>{% if nota.manifestacao %}{{ nota.manifestacao | evento }} em {{ nota.manifestado_em | data_hora }}{% else %}Nenhuma{% endif %}</dd>
+    </dl>
+  </section>
+
+  <section class="caixa">
+    <h2>Arquivos</h2>
+    <ul class="lista-arquivos">
+      <li>
+        {% if nota.arquivo_xml %}<a class="botao primario" href="{{ url_for('baixar_arquivo', chave=nota.chave, tipo='nfe') }}">Baixar XML da NF-e</a>
+        {% else %}<span class="muted">XML completo ainda não disponível.</span>{% endif %}
+      </li>
+      {% if nota.arquivo_resumo %}<li><a href="{{ url_for('baixar_arquivo', chave=nota.chave, tipo='resumo') }}">Resumo (resNFe)</a></li>{% endif %}
+    </ul>
+
+    <form method="post" action="{{ url_for('acao_selecionadas') }}" class="form-empilhado">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="voltar" value="{{ request.path }}">
+      <input type="hidden" name="chave" value="{{ nota.chave }}">
+      <h3>Manifestar</h3>
+      <select name="evento" id="evento">
+        {% for valor, rotulo in eventos_manifestacao.items() %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+      </select>
+      <input type="text" name="justificativa" id="justificativa" class="oculto" maxlength="255"
+             placeholder="Justificativa (15 a 255 caracteres)">
+      <div class="linha-botoes">
+        <button class="botao primario" name="acao" value="manifestar" {{ 'disabled' if not tarefas.certificado }}>Enviar manifestação</button>
+        {% if not nota.arquivo_xml %}
+        <button class="botao" name="acao" value="baixar" {{ 'disabled' if not tarefas.certificado }}>Buscar XML na SEFAZ</button>
+        {% endif %}
+      </div>
+    </form>
+  </section>
+</div>
+
+<section class="caixa">
+  <h2>Eventos</h2>
+  {% if eventos %}
+  <table class="tabela">
+    <thead><tr><th>Evento</th><th>Seq.</th><th>Descrição</th><th></th></tr></thead>
+    <tbody>
+    {% for e in eventos %}
+      <tr>
+        <td>{{ e.tipo | evento }} <span class="muted pequeno">{{ e.tipo }}</span></td>
+        <td>{{ e.sequencia }}</td>
+        <td>{{ e.descricao or '' }}</td>
+        <td><a href="{{ url_for('baixar_evento', chave=e.chave, tipo=e.tipo, sequencia=e.sequencia) }}">XML</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Nenhum evento registrado para esta nota.</p>{% endif %}
+</section>
+{% endblock %}

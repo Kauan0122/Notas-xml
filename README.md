@@ -47,7 +47,34 @@ notaxml certificado                              # confere se o certificado abre
 
 `config.toml`, certificados e a pasta `dados/` estão no `.gitignore` — nunca envie isso ao GitHub.
 
-## Uso
+## Interface no navegador
+
+```bash
+notaxml web
+```
+
+Abre o navegador em <http://127.0.0.1:8000> com:
+
+- **Lista de notas** com totais, busca por emitente/CNPJ/chave, filtro por período, situação e pendências;
+- **Sincronizar agora** (com opção de dar ciência nas notas novas) e um painel que mostra o andamento ao vivo;
+- **Manifestação em lote**: marque as notas, escolha o evento e clique em *Manifestar*;
+- **Download** do XML de cada nota, de um **ZIP** com as selecionadas/filtradas e exportação **CSV**;
+- Página de cada nota com dados, eventos (cancelamento, carta de correção...) e seus XMLs;
+- **Sincronização automática** de hora em hora enquanto o sistema estiver aberto (`[web] sincronizacao_automatica`).
+
+Se a senha do certificado não estiver em `NFE_CERT_SENHA`, a tela *Certificado* pede a senha
+(ela fica só na memória enquanto o sistema estiver aberto).
+
+**Acesso por outros computadores da rede:** use `host = "0.0.0.0"` em `[web]` e defina uma senha de acesso
+(`NOTAXML_WEB_SENHA` ou `[web] senha`) — sem senha o sistema se recusa a abrir para a rede, porque a
+interface consegue enviar eventos assinados com o certificado da empresa. Não exponha na internet.
+
+Para deixar sempre ligado, configure `notaxml web --sem-navegador` como serviço (systemd no Linux,
+ou uma tarefa "Ao iniciar o computador" no Agendador de Tarefas do Windows).
+
+## Linha de comando
+
+Tudo o que a interface faz também existe na linha de comando:
 
 ```bash
 # Baixa tudo o que houver de novo
@@ -72,7 +99,7 @@ notaxml listar --pendentes
 notaxml listar --csv notas.csv                   # abre direto no Excel
 ```
 
-### Rodar automaticamente
+### Rodar automaticamente sem a interface
 
 Agende `notaxml sincronizar --ciencia-automatica` para rodar **de hora em hora** (ou com intervalo maior):
 
@@ -122,4 +149,6 @@ Se o `xmlsec1` estiver instalado, a assinatura da manifestação também é vali
 | `notaxml/manifestacao.py` + `assinatura.py` | Eventos de manifestação assinados (XMLDSig) |
 | `notaxml/armazenamento.py` | XMLs em disco + índice SQLite |
 | `notaxml/sincronizador.py` | Regras de NSU, intervalo de 1 hora e bloqueio 656 |
+| `notaxml/operacoes.py` | Operações compartilhadas pela CLI e pela web |
 | `notaxml/cli.py` | Linha de comando |
+| `notaxml/web/` | Interface web (Flask): rotas, tarefas em segundo plano, templates e estilos |

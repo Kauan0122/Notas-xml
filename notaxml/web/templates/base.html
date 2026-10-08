@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Notas{% endblock %} · NotaXML</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231d4ed8'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='white' font-family='sans-serif'>NF</text></svg>">
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-interno">
+      <a class="marca" href="{{ url_for('notas') }}"><span class="logo">NF</span> NotaXML</a>
+      {% if not cfg.web.senha or session.get('autenticado') %}
+      <nav>
+        <a href="{{ url_for('notas') }}" class="{{ 'ativo' if request.endpoint == 'notas' }}">Notas</a>
+        <a href="{{ url_for('certificado') }}" class="{{ 'ativo' if request.endpoint == 'certificado' }}">Certificado</a>
+        {% if cfg.web.senha %}
+        <form method="post" action="{{ url_for('sair') }}" class="inline">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+          <button class="link">Sair</button>
+        </form>
+        {% endif %}
+      </nav>
+      <div class="empresa">
+        <span>{{ cfg.documento | documento }} · {{ cfg.uf }}</span>
+        <span class="selo {{ 'selo-aviso' if cfg.ambiente == 2 else 'selo-neutro' }}">{{ ambiente_nome }}</span>
+        {% if tarefas.certificado %}
+          <span class="selo selo-ok" title="Válido até {{ tarefas.certificado.valido_ate.strftime('%d/%m/%Y') }}">Certificado ativo</span>
+        {% else %}
+          <a class="selo selo-erro" href="{{ url_for('certificado') }}">Certificado bloqueado</a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="conteudo">
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+      {% for categoria, mensagem in mensagens %}
+        <div class="aviso aviso-{{ categoria }}">{{ mensagem }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {% if not cfg.web.senha or session.get('autenticado') %}
+    {% set ultima = tarefas.ultima() %}
+    <section id="painel-tarefa" class="painel-tarefa {{ 'oculto' if not ultima }}"
+             data-url="{{ url_for('tarefa') }}" data-situacao="{{ ultima.situacao if ultima else '' }}"
+             data-id="{{ ultima.id if ultima else '' }}">
+      <div class="painel-cabecalho">
+        <span class="indicador"></span>
+        <strong id="tarefa-nome">{{ ultima.nome if ultima else '' }}</strong>
+        <span id="tarefa-situacao" class="muted"></span>
+        <button type="button" class="link" id="tarefa-alternar">detalhes</button>
+      </div>
+      <pre id="tarefa-log" class="{{ '' if ultima and ultima.recente else 'oculto' }}">{{ ultima.linhas | join('\n') if ultima else '' }}</pre>
+    </section>
+    {% endif %}
+
+    {% block conteudo %}{% endblock %}
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

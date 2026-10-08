@@ -1,13 +1,22 @@
 import os
 import re
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .erros import ErroConfiguracao
 from .ufs import CODIGOS_UF
 
 AMBIENTES = {"producao": 1, "homologacao": 2}
+
+
+@dataclass
+class ConfigWeb:
+    host: str = "127.0.0.1"
+    porta: int = 8000
+    senha: str | None = None  # senha de acesso à interface (obrigatória fora do localhost)
+    sincronizacao_automatica: bool = False
+    intervalo_minutos: int = 60
 
 
 @dataclass
@@ -21,6 +30,7 @@ class Config:
     timeout: int
     pasta_dados: Path
     ciencia_automatica: bool
+    web: ConfigWeb = field(default_factory=ConfigWeb)
 
     @property
     def cuf(self) -> int:
@@ -75,4 +85,18 @@ def carregar_config(caminho: str | Path) -> Config:
         timeout=int(sefaz.get("timeout", 60)),
         pasta_dados=_caminho(base, dados.get("armazenamento", {}).get("pasta", "dados")),
         ciencia_automatica=bool(dados.get("sincronizacao", {}).get("ciencia_automatica", False)),
+        web=_config_web(dados.get("web", {})),
+    )
+
+
+def _config_web(web: dict) -> ConfigWeb:
+    intervalo = int(web.get("intervalo_minutos", 60))
+    if intervalo < 60:
+        raise ErroConfiguracao("[web] intervalo_minutos deve ser de pelo menos 60 (regra da SEFAZ).")
+    return ConfigWeb(
+        host=str(web.get("host", "127.0.0.1")),
+        porta=int(web.get("porta", 8000)),
+        senha=os.environ.get("NOTAXML_WEB_SENHA") or web.get("senha") or None,
+        sincronizacao_automatica=bool(web.get("sincronizacao_automatica", False)),
+        intervalo_minutos=intervalo,
     )
