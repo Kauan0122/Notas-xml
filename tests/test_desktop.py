@@ -87,3 +87,61 @@ def test_porta_livre_e_escolha(monkeypatch):
         assert escolhida is not None and escolhida != porta  # pula para a próxima livre
     finally:
         ocupada.close()
+
+
+# ---- acesso pela rede ligado na tela de Configurações (para quem abre o .exe com dois cliques) -------------
+
+def _enviar(cliente, pfx, **campos):
+    import io
+
+    html = cliente.get("/configuracao").get_data(as_text=True)
+    csrf = re.search(r'name="csrf" value="([^"]+)"', html).group(1)
+    dados = {"csrf": csrf, "uf": "SP", "ambiente": "producao", "certificado": (io.BytesIO(pfx), "e.pfx"),
+             "senha": "1234", **campos}
+    return cliente.post("/configuracao", data=dados, content_type="multipart/form-data")
+
+
+def test_tela_oferece_acesso_pela_rede_so_no_executavel(tmp_path):
+    com = Client(Aplicacao(tmp_path / "a" / "config.toml", opcoes_rede=True))
+    sem = Client(Aplicacao(tmp_path / "b" / "config.toml"))
+    assert "Permitir acesso de outros computadores" in com.get("/configuracao").get_data(as_text=True)
+    assert "Permitir acesso de outros computadores" not in sem.get("/configuracao").get_data(as_text=True)
+    assert "NotaXML 1." in com.get("/configuracao").get_data(as_text=True)  # versão no rodapé
+
+
+def test_ligar_acesso_pela_rede_exige_senha_e_grava_host_e_senha(tmp_path):
+    from .conftest import gerar_pfx
+
+    config = tmp_path / "config.toml"
+    cliente = Client(Aplicacao(config, opcoes_rede=True))
+    pfx = gerar_pfx("11222333000181")
+
+    r = _enviar(cliente, pfx, acesso_rede="1")  # sem senha de acesso
+    assert "Defina uma senha de acesso" in r.get_data(as_text=True) and not config.exists()
+
+    r = _enviar(cliente, pfx, acesso_rede="1", senha_acesso="curta")
+    assert "pelo menos 8" in r.get_data(as_text=True) and not (tmp_path / "certificado.pfx").exists()
+
+    r = _enviar(cliente, pfx, acesso_rede="1", senha_acesso="senha-bem-longa")
+    assert r.status_code == 302
+    web = ler_config_web(config)
+    assert web.host == "0.0.0.0" and web.senha == "senha-bem-longa"
+    # quem acabou de definir a senha continua logado
+    pagina = cliente.get("/")
+    assert pagina.status_code == 200 and "feche a janela preta" in pagina.get_data(as_text=True)
+
+
+def test_desligar_acesso_pela_rede_volta_ao_modo_local(tmp_path):
+    from .conftest import gerar_pfx
+
+    config = tmp_path / "config.toml"
+    cliente = Client(Aplicacao(config, opcoes_rede=True))
+    pfx = gerar_pfx("11222333000181")
+    _enviar(cliente, pfx, acesso_rede="1", senha_acesso="senha-bem-longa")
+
+    r = cliente.post("/configuracao", data={"csrf": re.search(
+        r'name="csrf" value="([^"]+)"', cliente.get("/configuracao").get_data(as_text=True)).group(1), "uf": "SP",
+        "ambiente": "producao"})
+    assert r.status_code == 302
+    web = ler_config_web(config)
+    assert web.host == "127.0.0.1" and web.senha is None

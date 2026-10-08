@@ -13,12 +13,12 @@ import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 
-from . import segredo
+from . import __version__, segredo
 from .config import ler_config_web, ler_secoes, salvar_config
 from .erros import ErroNotaXML
+from .rede import ENDERECOS_LOCAIS, TAMANHO_MINIMO_SENHA, endereco_na_rede
 
 PORTA_PADRAO = 8000
-TAMANHO_MINIMO_SENHA = 8
 
 
 def _pasta_programa() -> Path:
@@ -67,17 +67,6 @@ def _escolher_porta(preferida: int, host: str = "127.0.0.1") -> int | None:
     return None
 
 
-def _endereco_na_rede() -> str | None:
-    """Endereço desta máquina na rede local (não envia nenhum pacote)."""
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        try:
-            s.connect(("10.255.255.255", 1))
-            endereco = s.getsockname()[0]
-        except OSError:
-            return None
-    return None if endereco.startswith("127.") else endereco
-
-
 def _pedir_senha() -> str:
     if not sys.stdin or not sys.stdin.isatty():
         raise ErroNotaXML(
@@ -105,13 +94,14 @@ def configurar_servidor(caminho_config: Path, pedir_senha: Callable[[], str] = _
         # no Windows a senha fica criptografada pelo cofre do sistema, ligada ao usuário
         secao["senha"] = segredo.proteger(senha) if segredo.disponivel() else senha
         print("Senha de acesso salva.")
-    if web.host in ("127.0.0.1", "localhost", "::1"):
+    if web.host in ENDERECOS_LOCAIS:
         secao["host"] = "0.0.0.0"
     salvar_config(caminho_config, secoes)
 
 
 def _argumentos(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="NotaXML", description="NotaXML - download de NF-e da SEFAZ.")
+    parser.add_argument("--versao", action="version", version=f"NotaXML {__version__}")
     parser.add_argument("--servidor", action="store_true",
                         help="abre o sistema para a rede interna, com senha de acesso (não abre o navegador)")
     parser.add_argument("--redefinir-senha", action="store_true",
@@ -158,16 +148,17 @@ def main(argv: list[str] | None = None) -> int:
         raise ErroNotaXML("Para abrir o sistema na rede é preciso uma senha de acesso. Use NotaXML.exe --servidor.")
 
     print("=" * 60)
-    print(" NotaXML - download de notas fiscais da SEFAZ")
+    print(f" NotaXML {__version__} - download de notas fiscais da SEFAZ")
     print(" Mantenha esta janela aberta enquanto usa o sistema.")
     print(" Para encerrar, feche esta janela.")
     print("=" * 60)
     print(f"Configuração: {caminho_config}")
     print(f"XMLs:         {pasta_dados}")
     if not host_local(host):
-        rede = _endereco_na_rede()
+        rede = endereco_na_rede()
         print(f"Nos outros computadores da rede, abra: http://{rede or 'IP-DESTE-COMPUTADOR'}:{porta}")
-    rodar(Aplicacao(caminho_config, pasta_dados_padrao=pasta_dados, desktop=host_local(host)), host, porta,
+    rodar(Aplicacao(caminho_config, pasta_dados_padrao=pasta_dados, desktop=host_local(host), opcoes_rede=True),
+          host, porta,
           abrir_navegador=not args.servidor and not os.environ.get("NOTAXML_SEM_NAVEGADOR"))
     return 0
 

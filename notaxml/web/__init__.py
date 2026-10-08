@@ -19,6 +19,7 @@ from .seguranca import cabecalhos, csrf_token, destino_seguro, verificar_csrf
 
 from .. import operacoes
 from ..armazenamento import Armazenamento, Filtro
+from .. import __version__
 from ..config import Config, ConfigWeb
 from ..danfe import gerar_danfe
 from ..erros import ErroNotaXML
@@ -108,14 +109,15 @@ def _flask(chave_secreta: str | None, https: bool = False) -> Flask:
 
 def criar_app_configuracao(caminho_config: Path, recarregar: Callable, pasta_dados_padrao: Path | None = None,
                            erro: str | None = None, chave_secreta: str | None = None,
-                           opcoes_web: ConfigWeb | None = None, limitador: LimitadorLogin | None = None) -> Flask:
+                           opcoes_web: ConfigWeb | None = None, limitador: LimitadorLogin | None = None,
+                           opcoes_rede: bool = False) -> Flask:
     """App usado enquanto não existe configuração válida: só mostra a tela de configuração."""
     opcoes_web = opcoes_web or ConfigWeb()
     app = _flask(chave_secreta, opcoes_web.https)
 
     @app.context_processor
     def contexto():
-        return {"cfg": None, "csrf_token": csrf_token, "tarefas": None, "erro_config": erro}
+        return {"cfg": None, "csrf_token": csrf_token, "tarefas": None, "erro_config": erro, "versao": __version__}
 
     exige_login(app, opcoes_web.senha)  # primeiro: quem não entrou vai direto para o login
     registrar_login(app, opcoes_web.senha, limitador, destino_padrao="/configuracao")
@@ -127,14 +129,14 @@ def criar_app_configuracao(caminho_config: Path, recarregar: Callable, pasta_dad
         verificar_csrf()
         return None
 
-    configuracao.registrar(app, caminho_config, recarregar, pasta_dados_padrao)
+    configuracao.registrar(app, caminho_config, recarregar, pasta_dados_padrao, opcoes_rede=opcoes_rede)
     return app
 
 
 def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminho_config: Path | None = None,
               recarregar: Callable | None = None, pasta_dados_padrao: Path | None = None,
               desktop: bool = False, chave_secreta: str | None = None,
-              limitador: LimitadorLogin | None = None) -> Flask:
+              limitador: LimitadorLogin | None = None, opcoes_rede: bool = False) -> Flask:
     app = _flask(chave_secreta, cfg.web.https)
     app.config["NOTAXML"] = cfg
     gerenciador = gerenciador or GerenciadorTarefas(cfg)
@@ -164,6 +166,7 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
             "ambiente_nome": "Produção" if cfg.ambiente == 1 else "Homologação",
             "configuravel": caminho_config is not None,
             "desktop": desktop,
+            "versao": __version__,
         }
 
     @app.before_request
@@ -177,7 +180,8 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
     registrar_login(app, cfg.web.senha, limitador, destino_padrao="/")
 
     if caminho_config is not None and recarregar is not None:
-        configuracao.registrar(app, caminho_config, recarregar, pasta_dados_padrao, lambda: gerenciador.ocupado)
+        configuracao.registrar(app, caminho_config, recarregar, pasta_dados_padrao, lambda: gerenciador.ocupado,
+                               opcoes_rede)
 
     if desktop:
         @app.post("/abrir-pasta")

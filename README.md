@@ -67,25 +67,30 @@ docker compose up -d --build
   descomente `NOTAXML_CA_BUNDLE` no `docker-compose.yml` e rode `docker compose up -d`.
 ### Servidor Windows (sem Docker)
 
-Use o próprio `NotaXML.exe` em **modo servidor**. Ele fica aberto para a rede interna, protegido por senha.
+Use o próprio `NotaXML.exe`. Ele fica aberto para a rede interna, protegido por senha.
 
 1. Crie a pasta `C:\NotaXML` e coloque nela o `NotaXML.exe` e um arquivo vazio chamado `config.toml`
-   (isso mantém tudo nessa pasta, o que facilita o backup).
-2. Abra o **Prompt de Comando** nessa pasta e rode `NotaXML.exe --servidor`. Na primeira vez ele pede para
-   você **definir a senha de acesso** (mínimo 8 caracteres; fica criptografada pelo Windows). A janela mostra o
-   endereço para usar nos outros computadores, por exemplo `http://192.168.0.50:8000`.
+   (isso mantém tudo nessa pasta, o que facilita o backup). Dê dois cliques no `NotaXML.exe`.
+2. Na tela de boas-vindas, envie o certificado A1, a senha dele e a UF. Marque
+   **Permitir acesso de outros computadores da rede interna** e defina a **senha de acesso** (mínimo 8
+   caracteres; no Windows ela fica criptografada pelo sistema). Clique em **Salvar**.
+   Depois, **feche a janela preta e abra o `NotaXML.exe` de novo**: agora ele aceita os outros computadores.
+   O endereço (por exemplo `http://192.168.0.50:8000`) aparece na tela Configurações e na janela preta.
+   Dá para mudar isso a qualquer momento em **Configurações**.
 3. Libere a porta só para a rede local (PowerShell como administrador):
    `New-NetFirewallRule -DisplayName "NotaXML" -Direction Inbound -Protocol TCP -LocalPort 8000 -RemoteAddress LocalSubnet -Action Allow`
-4. Em outro computador abra o endereço, entre com a senha e faça a configuração (certificado A1, senha dele e UF).
-   Marque **Lembrar a senha** para a sincronização voltar sozinha depois de reiniciar.
+4. Nos outros computadores, abra o endereço e entre com a senha de acesso.
+   Marque **Lembrar a senha** do certificado para a sincronização voltar sozinha depois de reiniciar.
 5. **Ligar sozinho com o Windows:** *Agendador de Tarefas → Criar Tarefa*: marque *Executar estando o usuário
    conectado ou não*; *Disparador*: **Na inicialização**; *Ação*: programa `C:\NotaXML\NotaXML.exe`, argumentos
    `--servidor`, iniciar em `C:\NotaXML`; em *Configurações* desmarque "Interromper a tarefa se ela for executada
-   por mais de 3 dias". Use a **mesma conta do Windows** que definiu a senha (a criptografia é ligada ao usuário).
+   por mais de 3 dias". Use a **mesma conta do Windows** que definiu as senhas (a criptografia é ligada ao usuário).
 6. No roteador, reserve um IP fixo para esse computador.
 
-- **Mudar a senha de acesso:** `NotaXML.exe --servidor --redefinir-senha`.
-- **Atualizar:** baixe o novo `.exe`, finalize a tarefa no Agendador, substitua o arquivo e execute a tarefa.
+- **Qual versão está rodando:** aparece no rodapé do sistema e na janela preta (ou `NotaXML.exe --versao`).
+- **Mudar a senha de acesso:** Configurações → campo "Senha de acesso", ou `NotaXML.exe --servidor --redefinir-senha`.
+- **Atualizar:** feche o NotaXML antigo (janela preta ou tarefa do Agendador), substitua o `.exe` e abra de novo.
+  Se o antigo ainda estiver aberto, o novo só reabre o navegador nele.
 - **Backup:** copie a pasta `C:\NotaXML` inteira (tem o certificado; a senha salva só abre nesta conta/computador).
 - Para ver as mensagens (erros, endereço), feche a tarefa e rode `NotaXML.exe --servidor` no Prompt de Comando.
 

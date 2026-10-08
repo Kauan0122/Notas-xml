@@ -48,6 +48,27 @@
     <label class="check"><input type="checkbox" name="ciencia_automatica" value="1" {{ 'checked' if valores.ciencia_automatica }}>
       Dar "Ciência da Operação" automaticamente nas notas novas (libera o XML completo)</label>
 
+    {% if opcoes_rede %}
+    <div class="bloco-rede">
+      <label class="check"><input type="checkbox" name="acesso_rede" value="1" {{ 'checked' if valores.acesso_rede }}>
+        Permitir acesso de outros computadores da rede interna</label>
+      <label>Senha de acesso ao sistema
+        <input type="password" name="senha_acesso" autocomplete="new-password" minlength="{{ tamanho_minimo_senha }}"
+               placeholder="{{ 'Deixe em branco para manter a atual' if valores.tem_senha_acesso else 'Mínimo ' ~ tamanho_minimo_senha ~ ' caracteres' }}">
+      </label>
+      <p class="muted pequeno">
+        Os outros computadores acessam <span class="mono">http://{{ endereco_rede or 'IP-DESTE-COMPUTADOR' }}:{{ porta }}</span>.
+        Depois de salvar, <strong>feche a janela preta do NotaXML e abra de novo</strong>.
+        Use só em rede interna; não libere a porta no roteador.
+      </p>
+      <details>
+        <summary>Firewall do Windows</summary>
+        <p class="muted pequeno">Se os outros computadores não conseguirem abrir, libere a porta (PowerShell como administrador):</p>
+        <p class="mono pequeno">New-NetFirewallRule -DisplayName "NotaXML" -Direction Inbound -Protocol TCP -LocalPort {{ porta }} -RemoteAddress LocalSubnet -Action Allow</p>
+      </details>
+    </div>
+    {% endif %}
+
     <details>
       <summary>Avançado</summary>
       <label>Ambiente da SEFAZ
