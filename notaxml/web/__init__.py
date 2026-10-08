@@ -60,6 +60,18 @@ def _data(valor, com_hora=False) -> str:
     return dt.strftime("%d/%m/%Y")
 
 
+def _data_curta(valor) -> str:
+    """dd/mm no ano corrente (como a hora no WhatsApp); dd/mm/aa nos outros anos."""
+    try:
+        dia = datetime.fromisoformat(str(valor))
+    except ValueError:
+        return str(valor or "")
+    return dia.strftime("%d/%m") if dia.year == date.today().year else dia.strftime("%d/%m/%y")
+
+
+EVENTOS_CURTOS = {"210210": "Ciência", "210200": "Confirmada", "210220": "Desconhecida", "210240": "Não realizada"}
+
+
 def _documento(valor) -> str:
     valor = valor or ""
     if len(valor) == 14:
@@ -67,6 +79,21 @@ def _documento(valor) -> str:
     if len(valor) == 11:
         return f"{valor[:3]}.{valor[3:6]}.{valor[6:9]}-{valor[9:]}"
     return valor
+
+
+_PALAVRAS_IGNORADAS = {"de", "da", "do", "dos", "das", "e", "ltda", "me", "sa", "epp", "eireli", "s", "a"}
+
+
+def _iniciais(nome) -> str:
+    """Duas letras para o avatar (ex.: "ATACADAO DE EMBALAGENS SA" -> "AE")."""
+    palavras = [p for p in (nome or "").replace("-", " ").split() if p.lower().strip(".,") not in _PALAVRAS_IGNORADAS]
+    letras = "".join(p[0] for p in palavras[:2] if p[0].isalnum())
+    return (letras or (nome or "?")[:1]).upper()
+
+
+def _matiz(nome) -> int:
+    """Cor do avatar (matiz de 0 a 359), sempre a mesma para o mesmo nome."""
+    return sum(ord(c) * (i + 1) for i, c in enumerate(nome or "")) * 37 % 360
 
 
 def _chave(valor) -> str:
@@ -116,6 +143,10 @@ def _flask(chave_secreta: str | None, https: bool = False) -> Flask:
     app.add_template_filter(partial(_data, com_hora=True), "data_hora")
     app.add_template_filter(_documento, "documento")
     app.add_template_filter(_chave, "chave")
+    app.add_template_filter(_iniciais, "iniciais")
+    app.add_template_filter(_data_curta, "data_curta")
+    app.add_template_filter(lambda c: EVENTOS_CURTOS.get(c or "", ""), "evento_curto")
+    app.add_template_filter(_matiz, "matiz")
     app.add_template_filter(lambda c: NOMES_EVENTOS.get(c or "", c or ""), "evento")
     return app
 

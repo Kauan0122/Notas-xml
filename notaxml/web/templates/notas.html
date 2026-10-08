@@ -2,7 +2,7 @@
 {% block conteudo %}
 <div class="cabecalho-pagina">
   <div>
-    <h1>Notas recebidas</h1>
+    <h1 class="sem-titulo-movel">Notas recebidas</h1>
     <p class="muted">
       {% if estado.proxima_consulta %}
         Última posição na SEFAZ: NSU {{ estado.ult_nsu | int }}{% if estado.max_nsu %} de {{ estado.max_nsu | int }}{% endif %}.
@@ -17,9 +17,11 @@
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
     <input type="hidden" name="voltar" value="{{ request.full_path }}">
     <label class="check"><input type="checkbox" name="ciencia" value="1" {{ 'checked' if cfg.ciencia_automatica }}> Dar ciência nas novas</label>
-    <button class="botao primario" {{ 'disabled' if not tarefas.certificado or tarefas.ocupado }}>Sincronizar agora</button>
+    <button class="botao primario fab" aria-label="Sincronizar agora" {{ 'disabled' if not tarefas.certificado or tarefas.ocupado }}>
+      <span class="fab-icone"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4M6 21v-4h4"/></svg></span>
+      <span class="fab-rotulo">Sincronizar agora</span></button>
     {% if desktop %}
-    <button class="botao" formaction="{{ url_for('abrir_pasta') }}" title="{{ cfg.pasta_dados }}">Abrir pasta dos XMLs</button>
+    <button class="botao nao-movel" formaction="{{ url_for('abrir_pasta') }}" title="{{ cfg.pasta_dados }}">Abrir pasta dos XMLs</button>
     {% endif %}
   </form>
 </div>
@@ -33,8 +35,10 @@
     <span class="rotulo">Sem XML completo</span><span class="valor">{{ geral.sem_xml or 0 }}</span></a>
 </div>
 
-<form method="get" class="filtros">
-  <input type="search" name="q" value="{{ filtro.texto }}" placeholder="Emitente, CNPJ ou chave">
+<form method="get" class="filtros {{ 'aberto' if filtro.inicio or filtro.fim or filtro.situacao or filtro.pendencia }}">
+  <input type="search" name="q" value="{{ filtro.texto }}" placeholder="Buscar emitente, CNPJ ou chave">
+  <button type="button" class="botao fantasma" id="alternar-filtros" aria-expanded="false">Filtros</button>
+  <div class="filtros-extra">
   <label>De <input type="date" name="de" value="{{ filtro.inicio }}"></label>
   <label>Até <input type="date" name="ate" value="{{ filtro.fim }}"></label>
   <select name="situacao">
@@ -54,6 +58,7 @@
   {% set export_args = args.copy() %}{% set _ = export_args.pop('pagina', None) %}
   <a class="botao fantasma" href="{{ url_for('exportar_csv', **export_args) }}">Exportar CSV</a>
   <a class="botao fantasma" href="{{ url_for('exportar_zip', **export_args) }}">Baixar XMLs (ZIP)</a>
+  </div>
 </form>
 
 <form method="post" action="{{ url_for('acao_selecionadas') }}" id="form-notas">
@@ -74,7 +79,7 @@
   </div>
 
   <div class="tabela-rolagem">
-  <table class="tabela tabela-notas">
+  <table class="tabela tabela-notas lista-conversas">
     <thead>
       <tr>
         <th class="col-check"><input type="checkbox" id="marcar-todas" aria-label="Selecionar todas"></th>
@@ -90,15 +95,16 @@
     {% for n in notas %}
       <tr>
         <td class="col-check c-check"><input type="checkbox" name="chave" value="{{ n.chave }}" class="marcar"></td>
-        <td class="nowrap c-data">{{ n.emissao | data }}</td>
+        <td class="nowrap c-data c-topo"><span class="nao-movel">{{ n.emissao | data }}</span><span class="so-movel">{{ n.emissao | data_curta }}</span></td>
         <td class="c-emit">
+          <span class="avatar" style="--matiz: {{ (n.emitente_nome or '') | matiz }}"><span>{{ n.emitente_nome | iniciais }}</span></span>
           <a href="{{ url_for('nota', chave=n.chave) }}" class="emitente">{{ n.emitente_nome or 'Emitente não informado' }}</a>
           <span class="muted pequeno">{{ n.emitente_documento | documento }}</span>
         </td>
-        <td class="num nowrap c-valor">{{ n.valor | moeda }}</td>
-        <td class="c-sit"><span class="selo selo-{{ {'autorizada': 'ok', 'cancelada': 'erro', 'denegada': 'erro'}.get(n.situacao, 'neutro') }}">{{ (n.situacao or '—') | capitalize }}</span></td>
-        <td class="c-man">
-          {% if n.manifestacao %}{{ n.manifestacao | evento }}
+        <td class="num nowrap c-valor c-sub">{{ n.valor | moeda }}{% if n.numero %} · NF {{ n.numero }}{% endif %}</td>
+        <td class="c-sit {{ 'sit-ok' if n.situacao == 'autorizada' }}"><span class="selo selo-{{ {'autorizada': 'ok', 'cancelada': 'erro', 'denegada': 'erro'}.get(n.situacao, 'neutro') }}">{{ (n.situacao or '—') | capitalize }}</span></td>
+        <td class="c-man c-baixo">
+          {% if n.manifestacao %}<span class="nao-movel">{{ n.manifestacao | evento }}</span><span class="so-movel">{{ n.manifestacao | evento_curto }}</span>
           {% elif n.arquivo_xml %}<span class="muted c-vazio">—</span>
           {% else %}<span class="selo selo-aviso">Pendente</span>{% endif %}
         </td>

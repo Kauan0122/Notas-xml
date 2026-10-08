@@ -7,7 +7,7 @@
     <p class="muted">Informe os dados da empresa e o certificado digital A1 para começar a baixar as notas da SEFAZ.</p>
     {% if erro_config %}<div class="aviso aviso-erro">Não foi possível ler a configuração atual: {{ erro_config }}</div>{% endif %}
   {% else %}
-    <h1>Configurações</h1>
+    <h1 class="sem-titulo-movel">Configurações</h1>
   {% endif %}
 
   <form method="post" enctype="multipart/form-data" class="form-empilhado" id="form-configuracao">

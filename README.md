@@ -97,6 +97,15 @@ Use o próprio `NotaXML.exe`. Ele fica aberto para a rede interna, protegido por
 - **Sem Docker (Linux):** `pip install .` e depois
   `NOTAXML_WEB_SENHA=... notaxml web --host 0.0.0.0 --sem-navegador` (use systemd para manter ligado).
 
+## Navegação no celular (estilo WhatsApp)
+
+Em telas pequenas (celular, ou o navegador estreito) a tela muda para um formato parecido com o WhatsApp:
+**abas embaixo** (Notas, Contas com o número de vencidos, Certificado, Ajustes), título e menu ⋮ no topo,
+**lista em linhas** com avatar colorido (iniciais do fornecedor), data curta e etiqueta "Pendente", e um **botão redondo**
+para sincronizar. **Toque** numa linha abre a nota; **segure** a linha para selecionar várias (aparece o painel de
+manifestar, baixar XML/DANFE, ou marcar contas como pagas) e depois toque para marcar ou desmarcar. No computador a tela
+continua a de sempre.
+
 ## Celular Android (roda no próprio celular)
 
 O aplicativo `NotaXML.apk` leva o sistema inteiro dentro do celular: o Python, o certificado, o banco e os XMLs

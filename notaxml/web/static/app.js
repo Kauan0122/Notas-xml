@@ -25,6 +25,59 @@
   caixas.forEach((c) => c.addEventListener("change", atualizarSelecao));
   atualizarSelecao();
 
+  // ---- filtros recolhidos no celular
+  const botaoFiltros = document.getElementById("alternar-filtros");
+  if (botaoFiltros) {
+    botaoFiltros.addEventListener("click", () => {
+      const formulario = botaoFiltros.closest("form");
+      const aberto = formulario.classList.toggle("aberto");
+      botaoFiltros.setAttribute("aria-expanded", aberto ? "true" : "false");
+    });
+  }
+
+  // ---- lista estilo WhatsApp (celular): toque abre a nota; segurar a linha seleciona; depois, tocar alterna ----
+  const movel = () => window.matchMedia("(max-width: 760px)").matches;
+  const linhas = Array.from(document.querySelectorAll(".lista-conversas tbody tr")).filter((tr) => tr.querySelector("input.marcar"));
+  let emSelecao = false;
+  function alternarLinha(tr) {
+    const caixa = tr.querySelector("input.marcar");
+    caixa.checked = !caixa.checked;
+    tr.classList.toggle("selecionada", caixa.checked);
+    caixa.dispatchEvent(new Event("change", { bubbles: true }));
+    emSelecao = linhas.some((l) => l.querySelector("input.marcar").checked);
+  }
+  linhas.forEach((tr) => {
+    let temporizador = null;
+    let segurou = false;
+    const cancelar = () => clearTimeout(temporizador);
+    tr.addEventListener("touchstart", () => {
+      if (!movel()) return;
+      segurou = false;
+      temporizador = setTimeout(() => {
+        segurou = true;
+        alternarLinha(tr);
+        if (navigator.vibrate) navigator.vibrate(15);
+      }, 450);
+    }, { passive: true });
+    ["touchmove", "touchend", "touchcancel"].forEach((evento) => tr.addEventListener(evento, cancelar, { passive: true }));
+    tr.addEventListener("contextmenu", (e) => { if (movel()) e.preventDefault(); });
+    tr.addEventListener("click", (e) => {
+      if (!movel()) return;
+      if (segurou) { segurou = false; e.preventDefault(); return; }
+      if (e.target.closest("input, button, select")) return;
+      if (emSelecao) { e.preventDefault(); alternarLinha(tr); return; }
+      const link = tr.querySelector("a.emitente");
+      if (link) { e.preventDefault(); window.location.href = link.href; }
+    });
+  });
+  // marcar todas / limpar também reflete na aparência das linhas
+  if (marcarTodas) {
+    marcarTodas.addEventListener("change", () => {
+      linhas.forEach((tr) => tr.classList.toggle("selecionada", tr.querySelector("input.marcar").checked));
+      emSelecao = linhas.some((l) => l.querySelector("input.marcar").checked);
+    });
+  }
+
   // ---- justificativa obrigatória para "Operação não realizada" ---------
   const evento = document.getElementById("evento");
   const justificativa = document.getElementById("justificativa");

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block titulo %}{{ nota.emitente_nome or nota.chave }}{% endblock %}
 {% block conteudo %}
-<p><a href="{{ url_for('notas') }}">← Voltar para as notas</a></p>
+<p class="nao-movel"><a href="{{ url_for('notas') }}">← Voltar para as notas</a></p>
 <div class="cabecalho-pagina">
   <div>
     <h1>{{ nota.emitente_nome or 'Emitente não informado' }}</h1>

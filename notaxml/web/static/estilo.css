@@ -185,28 +185,6 @@ dd { margin: 0; }
   .tabela th, .tabela td { padding: .5rem; }
   dl { grid-template-columns: 1fr; gap: .1rem; }
 
-  /* lista de notas vira cartões */
-  .tabela-notas thead { display: none; }
-  .tabela-notas, .tabela-notas tbody, .tabela-notas tfoot { display: block; }
-  .tabela-notas tbody tr {
-    display: grid; gap: .2rem .75rem; padding: .75rem;
-    grid-template-columns: 1.75rem 1fr auto;
-    grid-template-areas: "check emit emit" "check data valor" "check sit xml" "check man man";
-    border-bottom: 1px solid var(--borda);
-  }
-  .tabela-notas tbody td { display: block; padding: 0; border: 0; }
-  .tabela-notas .c-check { grid-area: check; width: auto; }
-  .tabela-notas .c-emit { grid-area: emit; }
-  .tabela-notas .c-data { grid-area: data; color: var(--texto-suave); font-size: .9rem; }
-  .tabela-notas .c-valor { grid-area: valor; font-weight: 600; }
-  .tabela-notas .c-sit { grid-area: sit; }
-  .tabela-notas .c-xml { grid-area: xml; text-align: right; }
-  .tabela-notas .c-man { grid-area: man; font-size: .9rem; }
-  .tabela-notas .c-man:has(.c-vazio) { display: none; }
-  .tabela-notas tbody tr:has(td.vazio) { display: block; }
-  .tabela-notas tfoot tr { display: flex; justify-content: space-between; padding: .6rem .75rem; }
-  .tabela-notas tfoot td { padding: 0; border: 0; }
-  .tabela-notas tfoot td:empty { display: none; }
   dd { margin-bottom: .5rem; }
 }
 
@@ -232,3 +210,102 @@ details label { display: grid; gap: .3rem; }
 .cartao-erro { border-color: var(--erro-texto); }
 .cartao-erro .valor { color: var(--erro-texto); }
 .cartao .detalhe { font-size: .82rem; color: var(--texto-suave); }
+
+/* ---- Navegação estilo WhatsApp (celular): abas embaixo, lista de conversas, botão redondo ---------------- */
+:root { --altura-abas: 64px; }
+.topo-mobile, .abas, .fab-icone, .avatar, .so-movel, #alternar-filtros { display: none; }
+.filtros-extra { display: contents; }
+.menu-mais summary { list-style: none; cursor: pointer; margin: 0; display: flex; padding: .35rem; border-radius: 50%; }
+.menu-mais summary::-webkit-details-marker { display: none; }
+.menu-mais svg { width: 1.5rem; height: 1.5rem; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.menu-mais svg.cheio { fill: currentColor; stroke: none; }
+.menu-mais { position: relative; display: block; }
+.menu-lista { position: absolute; right: 0; top: 2.4rem; min-width: 10rem; background: var(--superficie); border: 1px solid var(--borda);
+  border-radius: var(--raio); box-shadow: 0 6px 20px rgba(0, 0, 0, .18); padding: .35rem; z-index: 40; display: grid; gap: .1rem; }
+.menu-lista button { width: 100%; text-align: left; background: none; border: 0; color: var(--texto); font: inherit; padding: .55rem .7rem; border-radius: 6px; cursor: pointer; }
+.menu-lista button:hover { background: var(--linha-hover); }
+.menu-versao { color: var(--texto-suave); font-size: .78rem; padding: .35rem .7rem; }
+.aba-icone svg, .fab-icone svg, .voltar svg { width: 1.4rem; height: 1.4rem; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+@media (max-width: 760px) {
+  body { padding-bottom: calc(var(--altura-abas) + env(safe-area-inset-bottom, 0px)); }
+  .topo-interno .marca, .topo nav, .rodape { display: none; }
+  .topo { position: sticky; top: 0; z-index: 20; }
+  .topo-interno { padding: 0 16px .5rem; }
+  .empresa { font-size: .78rem; gap: .35rem; }
+  .topo-mobile { display: flex; align-items: center; gap: .6rem; padding: .7rem 16px .35rem; }
+  .titulo-mobile { flex: 1; margin: 0; font-size: 1.35rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .voltar { display: flex; color: var(--texto); padding: .25rem; margin-left: -.35rem; border-radius: 50%; }
+  .sem-titulo-movel { display: none; }
+  .cabecalho-pagina { margin-bottom: .6rem; }
+
+  /* abas embaixo */
+  .abas { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--superficie);
+    border-top: 1px solid var(--borda); height: calc(var(--altura-abas) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .aba { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .15rem;
+    color: var(--texto-suave); font-size: .72rem; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+  .aba:hover { text-decoration: none; }
+  .aba-icone { position: relative; display: flex; align-items: center; justify-content: center; width: 3.6rem; height: 1.9rem; border-radius: 999px; }
+  .aba.ativa { color: var(--texto); font-weight: 600; }
+  .aba.ativa .aba-icone { background: var(--info-fundo); color: var(--primaria); }
+  .aba .contador { position: absolute; top: -.15rem; right: .4rem; margin: 0; }
+
+  /* botão redondo de sincronizar */
+  .form-sincronizar { width: 100%; justify-content: space-between; }
+  .form-sincronizar .fab { position: fixed; right: 16px; bottom: calc(var(--altura-abas) + env(safe-area-inset-bottom, 0px) + 16px);
+    width: 3.6rem; height: 3.6rem; padding: 0; justify-content: center; border-radius: 1.2rem; z-index: 25; box-shadow: 0 4px 14px rgba(0, 0, 0, .3); }
+  .fab-icone { display: flex; }
+  .fab-rotulo { display: none; }
+  body:has(.barra-acoes.visivel) .fab { display: none; }
+
+  /* ações da seleção: painel acima das abas */
+  .barra-acoes.visivel { position: fixed; left: 8px; right: 8px; bottom: calc(var(--altura-abas) + env(safe-area-inset-bottom, 0px) + 8px);
+    top: auto; z-index: 28; box-shadow: 0 6px 20px rgba(0, 0, 0, .25); }
+
+  /* lista em linhas, como as conversas do WhatsApp */
+  .tabela-rolagem { border-radius: 0; border-left: 0; border-right: 0; box-shadow: none; overflow: visible; margin-left: -16px; margin-right: -16px; }
+  .lista-conversas thead { display: none; }
+  .lista-conversas, .lista-conversas tbody, .lista-conversas tfoot { display: block; }
+  .lista-conversas tbody tr { display: grid; grid-template-columns: 3rem 1fr auto; grid-template-areas: "av nome topo" "av sub baixo";
+    column-gap: .85rem; row-gap: .15rem; align-items: center; padding: .7rem 16px; border-bottom: 1px solid var(--borda);
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+  .lista-conversas tbody tr:active { background: var(--linha-hover); }
+  .lista-conversas tbody tr.selecionada { background: var(--info-fundo); }
+  .lista-conversas tbody td { display: block; padding: 0; border: 0; }
+  .lista-conversas .c-check, .lista-conversas .c-xml, .lista-conversas .c-sit { display: none; }
+  .lista-conversas .c-emit { display: contents; }
+  .avatar { display: flex; grid-area: av; width: 3rem; height: 3rem; border-radius: 50%; align-items: center; justify-content: center;
+    background: hsl(var(--matiz) 52% 40%); color: #fff; font-weight: 700; font-size: 1.05rem; letter-spacing: .02em; }
+  .lista-conversas tr.selecionada .avatar { background: var(--primaria); }
+  .lista-conversas tr.selecionada .avatar > span { display: none; }
+  .lista-conversas tr.selecionada .avatar::before { content: "✓"; font-size: 1.4rem; }
+  .lista-conversas .emitente { grid-area: nome; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .lista-conversas .emitente + .pequeno { display: none; }
+  .lista-conversas .c-topo { grid-area: topo; font-size: .78rem; color: var(--texto-suave); text-align: right; }
+  .lista-conversas .c-sub { grid-area: sub; color: var(--texto-suave); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+  .lista-conversas .c-baixo { grid-area: baixo; justify-self: end; font-size: .78rem; color: var(--texto-suave); text-align: right; }
+  .lista-conversas .c-baixo .vencido { color: var(--erro-texto); }
+  .lista-conversas td.vazio { grid-column: 1 / -1; }
+  .lista-conversas tbody tr:has(td.vazio) { display: block; cursor: default; }
+  .so-movel { display: inline; }
+  .nao-movel { display: none; }
+
+  /* resumo em faixa rolável e filtros recolhidos: a lista aparece logo na primeira tela */
+  .cartoes { display: flex; gap: .5rem; overflow-x: auto; margin-bottom: .6rem; padding-bottom: .15rem; scrollbar-width: none; }
+  .cartoes::-webkit-scrollbar { display: none; }
+  .cartao { flex: 0 0 auto; min-width: 7.5rem; padding: .45rem .75rem; }
+  .cartao .valor { font-size: 1.05rem; }
+  .cartao .rotulo, .cartao .detalhe { font-size: .72rem; white-space: nowrap; }
+  .filtros { gap: .4rem; }
+  .filtros input[type=search] { flex: 1 1 auto; min-width: 0; }
+  #alternar-filtros { display: inline-flex; }
+  .filtros-extra { display: none; width: 100%; flex-wrap: wrap; gap: .4rem; }
+  .filtros.aberto .filtros-extra { display: flex; }
+  .form-sincronizar .check { font-size: .85rem; }
+  .cabecalho-pagina p { font-size: .85rem; }
+  .explicacao { display: none; }
+  .lista-conversas tfoot tr { display: flex; justify-content: space-between; padding: .6rem 16px; }
+  .lista-conversas tfoot td { padding: 0; border: 0; }
+  .lista-conversas tfoot td:empty { display: none; }
+}

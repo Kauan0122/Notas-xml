@@ -3,8 +3,8 @@
 {% block conteudo %}
 <div class="cabecalho-pagina">
   <div>
-    <h1>Contas a pagar</h1>
-    <p class="muted">Parcelas (duplicatas) das notas de compra. Marque como pago quando quitar; notas canceladas ou não reconhecidas saem da conta sozinhas.</p>
+    <h1 class="sem-titulo-movel">Contas a pagar</h1>
+    <p class="muted explicacao">Parcelas (duplicatas) das notas de compra. Marque como pago quando quitar; notas canceladas ou não reconhecidas saem da conta sozinhas.</p>
   </div>
 </div>
 
@@ -23,8 +23,10 @@
     <span class="detalhe">{{ resumo.total_aberto.quantidade }} título(s)</span></a>
 </div>
 
-<form method="get" class="filtros">
-  <input type="search" name="q" value="{{ filtro.texto }}" placeholder="Fornecedor, CNPJ ou número da nota">
+<form method="get" class="filtros {{ 'aberto' if filtro.de or filtro.ate or filtro.situacao != 'aberto' }}">
+  <input type="search" name="q" value="{{ filtro.texto }}" placeholder="Buscar fornecedor, CNPJ ou nota">
+  <button type="button" class="botao fantasma" id="alternar-filtros" aria-expanded="false">Filtros</button>
+  <div class="filtros-extra">
   <select name="situacao">
     <option value="aberto" {{ 'selected' if filtro.situacao == 'aberto' }}>Em aberto</option>
     <option value="pago" {{ 'selected' if filtro.situacao == 'pago' }}>Pagos</option>
@@ -36,6 +38,7 @@
   <button class="botao">Filtrar</button>
   <span class="espaco"></span>
   <a class="botao fantasma" href="{{ url_for('pagar_csv', **args) }}">Exportar CSV</a>
+  </div>
 </form>
 
 <form method="post" action="{{ url_for('pagar_acao') }}" id="form-notas">
@@ -51,7 +54,7 @@
   </div>
 
   <div class="tabela-rolagem">
-  <table class="tabela">
+  <table class="tabela lista-conversas">
     <thead>
       <tr>
         <th class="col-check"><input type="checkbox" id="marcar-todas" aria-label="Selecionar todos"></th>
@@ -62,21 +65,24 @@
     {% for t in titulos %}
       {% set faixa = faixa_vencimento(t.vencimento) if t.situacao == 'aberto' else '' %}
       <tr>
-        <td class="col-check"><input type="checkbox" name="id" value="{{ t.id }}" class="marcar"></td>
-        <td class="nowrap">
-          <span class="{{ 'vencido' if faixa == 'vencido' }}">{{ t.vencimento | data }}</span>
+        <td class="col-check c-check"><input type="checkbox" name="id" value="{{ t.id }}" class="marcar"></td>
+        <td class="nowrap c-baixo">
+          <span class="{{ 'vencido' if faixa == 'vencido' }}"><span class="so-movel">Vence </span><span class="nao-movel">{{ t.vencimento | data }}</span><span class="so-movel">{{ t.vencimento | data_curta }}</span></span>
           {% if faixa == 'vencido' %}<span class="selo selo-erro">vencido</span>
-          {% elif faixa == 'hoje' %}<span class="selo selo-aviso">hoje</span>{% endif %}
+          {% elif faixa == 'hoje' %}<span class="selo selo-aviso">hoje</span>
+          {% elif t.situacao == 'pago' %}<span class="selo selo-ok so-movel">Pago</span>
+          {% elif t.situacao == 'cancelado' %}<span class="selo selo-erro so-movel">Cancelado</span>{% endif %}
         </td>
-        <td>
+        <td class="c-emit">
+          <span class="avatar" style="--matiz: {{ (t.emitente_nome or '') | matiz }}"><span>{{ t.emitente_nome | iniciais }}</span></span>
           <a href="{{ url_for('nota', chave=t.chave) }}" class="emitente">{{ t.emitente_nome or 'Fornecedor não informado' }}</a>
           <span class="muted pequeno">{{ t.emitente_documento | documento }}</span>
         </td>
-        <td class="nowrap">NF {{ t.numero or '—' }} · parcela {{ t.parcela }}
+        <td class="nowrap c-sub">NF {{ t.numero or '—' }} · parcela {{ t.parcela }}
           {% if t.origem == 'manual' %}<span class="muted pequeno">(à mão)</span>{% endif %}
           {% if t.observacao %}<br><span class="muted pequeno">{{ t.observacao }}</span>{% endif %}</td>
-        <td class="num nowrap">{{ t.valor | moeda }}</td>
-        <td><span class="selo selo-{{ {'aberto': 'aviso', 'pago': 'ok', 'cancelado': 'erro'}[t.situacao] }}">{{ t.situacao | capitalize }}</span>
+        <td class="num nowrap c-topo">{{ t.valor | moeda }}</td>
+        <td class="c-sit"><span class="selo selo-{{ {'aberto': 'aviso', 'pago': 'ok', 'cancelado': 'erro'}[t.situacao] }}">{{ t.situacao | capitalize }}</span>
           {% if t.pago_em %}<span class="muted pequeno">{{ t.pago_em | data }}</span>{% endif %}</td>
       </tr>
     {% else %}

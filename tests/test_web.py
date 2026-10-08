@@ -363,3 +363,53 @@ def test_csv_de_contas_a_pagar(ambiente):
     texto = r.data.decode("utf-8-sig")
     assert r.mimetype == "text/csv" and texto.startswith("fornecedor;cnpj;nota;parcela;vencimento;valor")
     assert texto.count("\n") == 4 and "500,00" in texto
+
+
+# ---- navegação estilo WhatsApp (celular) -------------------------------------------------------------------
+
+def test_abas_inferiores_e_avatares(ambiente):
+    from notaxml.web import _iniciais, _matiz
+
+    assert _iniciais("ATACADAO DE EMBALAGENS SA") == "AE"
+    assert _iniciais("Transportes Rápido Sul Ltda") == "TR"
+    assert _iniciais("") == "?" and _iniciais(None) == "?"
+    assert _iniciais("3M DO BRASIL") == "3B"
+    assert _matiz("FORNECEDOR SA") == _matiz("FORNECEDOR SA") and 0 <= _matiz("FORNECEDOR SA") < 360
+    assert _matiz("A") != _matiz("B")
+
+    app, _, _, _, cfg = ambiente()
+    _popular_com_parcelas(cfg)
+    cliente = app.test_client()
+    html = cliente.get("/").get_data(as_text=True)
+    assert 'class="abas"' in html and html.count('class="aba ') == 3  # Notas, Contas, Certificado (Ajustes só existe no app com configuração)
+    assert 'class="aba ativa"' in html and 'class="avatar"' in html and "<span>F</span>" in html
+    assert 'class="contador">2<' in html.split('class="abas"')[1]  # o aviso de contas vencidas também nas abas
+
+    assert 'class="topo-mobile"' in html and "<h2 class=\"titulo-mobile\">Notas</h2>" in html
+    pagar = cliente.get("/pagar").get_data(as_text=True)
+    assert "<h2 class=\"titulo-mobile\">Contas a pagar</h2>" in pagar and "lista-conversas" in pagar
+    detalhe = cliente.get("/nota/" + __import__("notaxml.amostra_nfe", fromlist=["x"]).CHAVE_COMPLETA).get_data(as_text=True)
+    assert 'class="voltar"' in detalhe  # a nota abre como uma conversa, com seta de voltar
+
+
+def test_login_nao_mostra_abas(ambiente):
+    app, *_ = ambiente(senha_web="segredo")
+    html = app.test_client().get("/login").get_data(as_text=True)
+    assert 'class="abas"' not in html and "topo-mobile" not in html
+
+
+def test_datas_e_rotulos_curtos(ambiente):
+    from notaxml.web import _data_curta
+
+    hoje = date.today()
+    assert _data_curta(hoje.isoformat()) == hoje.strftime("%d/%m")
+    assert _data_curta("2020-03-09T10:00:00-03:00") == "09/03/20"
+    assert _data_curta("lixo") == "lixo"
+
+    app, _, _, _, cfg = ambiente()
+    _popular_com_parcelas(cfg)
+    banco = Armazenamento(cfg.pasta_dados)
+    banco.registrar_manifestacao(__import__("notaxml.amostra_nfe", fromlist=["x"]).CHAVE_COMPLETA, "210200")
+    banco.fechar()
+    html = app.test_client().get("/").get_data(as_text=True)
+    assert 'class="so-movel">Confirmada<' in html and 'class="nao-movel">Confirmação da Operação<' in html
