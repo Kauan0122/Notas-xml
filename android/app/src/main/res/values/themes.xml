@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fundo branco: relógio e ícones das barras do sistema precisam ser escuros (no Android 15 o app
+         é desenhado por baixo das barras, com ícones claros por padrão). Declarado no tema, sem código. -->
+    <style name="TemaNotaXML" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

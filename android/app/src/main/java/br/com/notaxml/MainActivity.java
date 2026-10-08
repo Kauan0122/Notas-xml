@@ -15,7 +15,6 @@ import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
-import android.view.WindowInsetsController;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
@@ -65,44 +64,11 @@ public class MainActivity extends Activity {
         raiz.addView(aviso, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(raiz);
-        usarIconesEscurosNasBarras(); // só depois do setContentView: antes disso a janela ainda não existe
 
         configurarWebView();
         pedirPermissaoDeNotificacao();
         iniciarServico();
         esperarServidor();
-    }
-
-    /**
-     * O Android 15 desenha o app por baixo das barras do sistema com ícones claros. Como o fundo do app é branco,
-     * o relógio e os ícones sumiriam: pede ícones escuros na barra de status e na de gestos.
-     */
-    @SuppressWarnings("deprecation")
-    private void usarIconesEscurosNasBarras() {
-        try {
-            aplicarIconesEscuros();
-        } catch (RuntimeException indisponivel) {
-            // detalhe visual: se este aparelho não permitir, o app segue funcionando
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    private void aplicarIconesEscuros() {
-        if (Build.VERSION.SDK_INT >= 30) {
-            WindowInsetsController controle = getWindow().getInsetsController();
-            if (controle != null) {
-                int claras = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
-                        | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
-                controle.setSystemBarsAppearance(claras, claras);
-            }
-        } else {
-            View janela = getWindow().getDecorView();
-            int opcoes = janela.getSystemUiVisibility() | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            if (Build.VERSION.SDK_INT >= 26) {
-                opcoes |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-            }
-            janela.setSystemUiVisibility(opcoes);
-        }
     }
 
     @SuppressWarnings("deprecation")
