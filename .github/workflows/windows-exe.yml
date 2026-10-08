@@ -143,9 +143,9 @@ jobs:
             # escutando em todas as interfaces (e não só no próprio computador)
             $escuta = (Get-NetTCPConnection -LocalPort 8000 -State Listen).LocalAddress
             if ($escuta -notcontains "0.0.0.0") { throw "Não está aberto para a rede (escutando em: $escuta)" }
-            # exige login
-            $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/ -MaximumRedirection 0 -SkipHttpErrorCheck
-            if ($r.StatusCode -ne 302 -or $r.Headers.Location -notmatch "/login") { throw "Não pediu login" }
+            # exige login: quem não entrou cai na tela de senha
+            $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/
+            if ($r.Content -notmatch 'name="senha"' -or $r.Content -match "Notas recebidas") { throw "Não pediu login" }
             Write-Host "Modo servidor OK"
           } finally {
             # o .exe empacotado tem 2 processos (lançador + sistema): encerra a árvore inteira
