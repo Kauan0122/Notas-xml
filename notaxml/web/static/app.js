@@ -25,6 +25,16 @@
   caixas.forEach((c) => c.addEventListener("change", atualizarSelecao));
   atualizarSelecao();
 
+  // ---- teclado aberto (celular): esconde abas e botão redondo para sobrar espaço
+  const campoDeTexto = "input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=submit]), select, textarea";
+  document.addEventListener("focusin", (e) => { if (e.target.matches && e.target.matches(campoDeTexto)) document.body.classList.add("teclado"); });
+  document.addEventListener("focusout", () => {
+    setTimeout(() => {
+      const ativo = document.activeElement;
+      if (!(ativo && ativo.matches && ativo.matches(campoDeTexto))) document.body.classList.remove("teclado");
+    }, 60);
+  });
+
   // ---- filtros recolhidos no celular
   const botaoFiltros = document.getElementById("alternar-filtros");
   if (botaoFiltros) {

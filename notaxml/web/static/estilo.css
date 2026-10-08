@@ -213,7 +213,7 @@ details label { display: grid; gap: .3rem; }
 
 /* ---- Navegação estilo WhatsApp (celular): abas embaixo, lista de conversas, botão redondo ---------------- */
 :root { --altura-abas: 64px; }
-.topo-mobile, .abas, .fab-icone, .avatar, .so-movel, #alternar-filtros { display: none; }
+.topo-mobile, .abas, .fab-icone, .avatar, .so-movel, .so-movel-bloco, #alternar-filtros { display: none; }
 .filtros-extra { display: contents; }
 .menu-mais summary { list-style: none; cursor: pointer; margin: 0; display: flex; padding: .35rem; border-radius: 50%; }
 .menu-mais summary::-webkit-details-marker { display: none; }
@@ -290,6 +290,11 @@ details label { display: grid; gap: .3rem; }
   .lista-conversas tbody tr:has(td.vazio) { display: block; cursor: default; }
   .so-movel { display: inline; }
   .nao-movel { display: none; }
+  .so-movel-bloco { display: block; margin: 0 !important; }
+
+  /* teclado aberto: some o que ocuparia o espaço da lista (como o WhatsApp) */
+  body.teclado { padding-bottom: 0; }
+  body.teclado .abas, body.teclado .fab { display: none; }
 
   /* resumo em faixa rolável e filtros recolhidos: a lista aparece logo na primeira tela */
   .cartoes { display: flex; gap: .5rem; overflow-x: auto; margin-bottom: .6rem; padding-bottom: .15rem; scrollbar-width: none; }

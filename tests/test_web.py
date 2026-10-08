@@ -1,6 +1,6 @@
 import io
 import re
-from datetime import date
+from datetime import date, datetime
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -413,3 +413,22 @@ def test_datas_e_rotulos_curtos(ambiente):
     banco.fechar()
     html = app.test_client().get("/").get_data(as_text=True)
     assert 'class="so-movel">Confirmada<' in html and 'class="nao-movel">Confirmação da Operação<' in html
+
+
+def test_hora_curta_e_resumo_da_sincronizacao_no_celular(ambiente):
+    from datetime import timezone
+
+    from notaxml.web import _hora_curta
+
+    agora = datetime.now(timezone.utc)
+    assert _hora_curta(agora.isoformat()) == agora.astimezone().strftime("%H:%M")
+    assert _hora_curta("2020-03-09T10:00:00-03:00").startswith("09/03 ")
+    assert _hora_curta("lixo") == "lixo"
+
+    app, _, _, _, cfg = ambiente()
+    banco = Armazenamento(cfg.pasta_dados)
+    banco.salvar_nsu(CNPJ, 1, "000000000000866", "000000000000866")
+    banco.aguardar(CNPJ, 1)
+    banco.fechar()
+    html = app.test_client().get("/").get_data(as_text=True)
+    assert "NSU 866/866 · próxima consulta" in html and 'class="muted so-movel-bloco"' in html

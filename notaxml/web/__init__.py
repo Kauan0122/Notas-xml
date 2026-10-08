@@ -69,6 +69,17 @@ def _data_curta(valor) -> str:
     return dia.strftime("%d/%m") if dia.year == date.today().year else dia.strftime("%d/%m/%y")
 
 
+def _hora_curta(valor) -> str:
+    """Só a hora se for hoje (18:29); senão dd/mm hh:mm. Converte para o fuso do aparelho."""
+    try:
+        momento = datetime.fromisoformat(str(valor))
+    except ValueError:
+        return str(valor or "")
+    if momento.tzinfo:
+        momento = momento.astimezone()
+    return momento.strftime("%H:%M") if momento.date() == date.today() else momento.strftime("%d/%m %H:%M")
+
+
 EVENTOS_CURTOS = {"210210": "Ciência", "210200": "Confirmada", "210220": "Desconhecida", "210240": "Não realizada"}
 
 
@@ -145,6 +156,7 @@ def _flask(chave_secreta: str | None, https: bool = False) -> Flask:
     app.add_template_filter(_chave, "chave")
     app.add_template_filter(_iniciais, "iniciais")
     app.add_template_filter(_data_curta, "data_curta")
+    app.add_template_filter(_hora_curta, "hora_curta")
     app.add_template_filter(lambda c: EVENTOS_CURTOS.get(c or "", ""), "evento_curto")
     app.add_template_filter(_matiz, "matiz")
     app.add_template_filter(lambda c: NOMES_EVENTOS.get(c or "", c or ""), "evento")
