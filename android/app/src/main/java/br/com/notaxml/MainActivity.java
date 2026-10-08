@@ -51,7 +51,6 @@ public class MainActivity extends Activity {
 
         FrameLayout raiz = new FrameLayout(this);
         raiz.setBackgroundColor(Color.WHITE);
-        usarIconesEscurosNasBarras();
         // Android 15 desenha o app por baixo das barras do sistema: o conteúdo precisa respeitar as margens
         // (barra de status, barra de gestos e teclado), senão o relógio cobre o cabeçalho.
         raiz.setOnApplyWindowInsetsListener(this::ajustarMargens);
@@ -66,6 +65,7 @@ public class MainActivity extends Activity {
         raiz.addView(aviso, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(raiz);
+        usarIconesEscurosNasBarras(); // só depois do setContentView: antes disso a janela ainda não existe
 
         configurarWebView();
         pedirPermissaoDeNotificacao();
@@ -79,6 +79,15 @@ public class MainActivity extends Activity {
      */
     @SuppressWarnings("deprecation")
     private void usarIconesEscurosNasBarras() {
+        try {
+            aplicarIconesEscuros();
+        } catch (RuntimeException indisponivel) {
+            // detalhe visual: se este aparelho não permitir, o app segue funcionando
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void aplicarIconesEscuros() {
         if (Build.VERSION.SDK_INT >= 30) {
             WindowInsetsController controle = getWindow().getInsetsController();
             if (controle != null) {
