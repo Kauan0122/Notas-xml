@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      versao:
+        description: "Publicar uma Release com esta versão (ex.: v1.0.0). Deixe vazio para só gerar o .exe."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -82,7 +87,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.versao != '')
     needs: exe
     runs-on: ubuntu-latest
     permissions:
@@ -93,5 +98,12 @@ jobs:
           name: NotaXML-windows
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.versao || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: NotaXML ${{ inputs.versao || github.ref_name }}
           files: NotaXML.exe
+          body: |
+            Baixe o **NotaXML.exe**, dê dois cliques e siga a tela de boas-vindas (certificado A1, senha e UF).
+            Aviso do Windows na primeira vez: **Mais informações → Executar assim mesmo**.
+            Veja o README para detalhes.
           generate_release_notes: true
