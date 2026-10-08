@@ -27,9 +27,11 @@ mostrar "O Windows protegeu o computador". Clique em **Mais informações → Ex
 
 ### Onde baixar o .exe
 
-O GitHub gera o executável automaticamente a cada atualização do código (aba **Actions** do repositório →
-execução mais recente de "Gerar NotaXML.exe" → seção *Artifacts* → `NotaXML-windows`). Ao criar uma tag
-`v1.0.0`, o `.exe` também é publicado na página **Releases**.
+Na página de **Releases**: <https://github.com/Kauan0122/Notas-xml/releases/latest> → arquivo `NotaXML.exe`.
+
+O GitHub também gera o executável a cada atualização do código (aba **Actions** → execução mais recente →
+*Artifacts* → `NotaXML-windows`). Para publicar uma nova versão: Actions → "Gerar NotaXML.exe" →
+**Run workflow** → informe a versão (ex.: `v1.0.1`).
 
 Para gerar no próprio computador Windows (com Python 3.11+ instalado): `empacotamento\construir.bat`.
 
