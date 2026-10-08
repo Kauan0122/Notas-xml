@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -13,6 +14,7 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowInsets;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
@@ -47,6 +49,10 @@ public class MainActivity extends Activity {
         super.onCreate(estado);
 
         FrameLayout raiz = new FrameLayout(this);
+        raiz.setBackgroundColor(Color.WHITE);
+        // Android 15 desenha o app por baixo das barras do sistema: o conteúdo precisa respeitar as margens
+        // (barra de status, barra de gestos e teclado), senão o relógio cobre o cabeçalho.
+        raiz.setOnApplyWindowInsetsListener(this::ajustarMargens);
         web = new WebView(this);
         aviso = new TextView(this);
         aviso.setText("Iniciando o NotaXML…\nNa primeira vez isso pode levar um minuto.");
@@ -63,6 +69,26 @@ public class MainActivity extends Activity {
         pedirPermissaoDeNotificacao();
         iniciarServico();
         esperarServidor();
+    }
+
+    @SuppressWarnings("deprecation")
+    private WindowInsets ajustarMargens(View visao, WindowInsets margens) {
+        int esquerda, topo, direita, base;
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.graphics.Insets i = margens.getInsets(WindowInsets.Type.systemBars()
+                    | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
+            esquerda = i.left;
+            topo = i.top;
+            direita = i.right;
+            base = i.bottom;
+        } else {
+            esquerda = margens.getSystemWindowInsetLeft();
+            topo = margens.getSystemWindowInsetTop();
+            direita = margens.getSystemWindowInsetRight();
+            base = margens.getSystemWindowInsetBottom();
+        }
+        visao.setPadding(esquerda, topo, direita, base);
+        return Build.VERSION.SDK_INT >= 30 ? WindowInsets.CONSUMED : margens.consumeSystemWindowInsets();
     }
 
     private void configurarWebView() {

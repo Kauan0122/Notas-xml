@@ -66,7 +66,8 @@ h3 { font-size: .95rem; margin: 1rem 0 .5rem; }
   background: var(--primaria); color: var(--primaria-texto); border-radius: 6px;
   font-size: .75rem; padding: .2rem .35rem; letter-spacing: .02em;
 }
-nav { display: flex; gap: 1rem; align-items: center; }
+nav { display: flex; gap: .25rem 1rem; align-items: center; flex-wrap: wrap; }
+nav a { white-space: nowrap; }
 nav a { color: var(--texto-suave); padding: .25rem 0; border-bottom: 2px solid transparent; }
 nav a.ativo, nav a:hover { color: var(--texto); border-bottom-color: var(--primaria); text-decoration: none; }
 .empresa { margin-left: auto; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; font-size: .88rem; color: var(--texto-suave); }
