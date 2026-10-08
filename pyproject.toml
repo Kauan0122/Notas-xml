@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "notaxml"
-version = "0.2.0"
+version = "1.0.0"
 description = "Download automático de NF-e emitidas contra a empresa diretamente da SEFAZ (NFeDistribuicaoDFe)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -15,6 +15,7 @@ dependencies = [
     "flask>=3.0",
     "waitress>=3.0",
     "truststore>=0.9",
+    "brazilfiscalreport>=1.2",
 ]
 
 [project.optional-dependencies]

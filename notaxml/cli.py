@@ -52,6 +52,29 @@ def cmd_baixar(cfg: Config, args):
         operacoes.baixar(sinc, print, validar_chaves(args.chaves) if args.chaves else None)
 
 
+def cmd_danfe(cfg: Config, args):
+    from pathlib import Path
+
+    from .danfe import gerar_danfe
+
+    chaves = validar_chaves(args.chaves)
+    destino = Path(args.saida)
+    destino.mkdir(parents=True, exist_ok=True)
+    banco = Armazenamento(cfg.pasta_dados)
+    try:
+        for chave in chaves:
+            nota = banco.nota(chave)
+            if nota is None or not nota["arquivo_xml"]:
+                print(f"  {chave}: XML completo ainda não baixado")
+                continue
+            pdf = gerar_danfe(banco.caminho(nota["arquivo_xml"]).read_bytes(), nota["situacao"] == "cancelada")
+            arquivo = destino / f"DANFE-{chave}.pdf"
+            arquivo.write_bytes(pdf)
+            print(f"  {chave}: {arquivo}")
+    finally:
+        banco.fechar()
+
+
 def cmd_listar(cfg: Config, args):
     banco = Armazenamento(cfg.pasta_dados)
     try:
@@ -113,6 +136,11 @@ def criar_parser() -> argparse.ArgumentParser:
     p = subs.add_parser("baixar", help="baixa o XML de notas específicas pela chave de acesso")
     p.add_argument("chaves", nargs="*", help="chave(s) de acesso; sem chaves, usa as notas já manifestadas sem XML")
     p.set_defaults(func=cmd_baixar)
+
+    p = subs.add_parser("danfe", help="gera o DANFE em PDF de notas já baixadas")
+    p.add_argument("chaves", nargs="+", help="chave(s) de acesso de 44 dígitos")
+    p.add_argument("-o", "--saida", default=".", help="pasta onde salvar os PDFs (padrão: pasta atual)")
+    p.set_defaults(func=cmd_danfe)
 
     p = subs.add_parser("listar", help="lista as notas baixadas")
     p.add_argument("--pendentes", action="store_true", help="somente notas sem XML completo")

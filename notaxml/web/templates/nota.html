@@ -27,7 +27,10 @@
     <h2>Arquivos</h2>
     <ul class="lista-arquivos">
       <li>
-        {% if nota.arquivo_xml %}<a class="botao primario" href="{{ url_for('baixar_arquivo', chave=nota.chave, tipo='nfe') }}">Baixar XML da NF-e</a>
+        {% if nota.arquivo_xml %}<div class="linha-botoes">
+          <a class="botao primario" href="{{ url_for('baixar_arquivo', chave=nota.chave, tipo='nfe') }}">Baixar XML da NF-e</a>
+          <a class="botao" href="{{ url_for('danfe', chave=nota.chave) }}" target="_blank" rel="noopener">Ver DANFE (PDF)</a>
+          <a class="botao fantasma" href="{{ url_for('danfe', chave=nota.chave, baixar=1) }}">Baixar PDF</a></div>
         {% else %}<span class="muted">XML completo ainda não disponível.</span>{% endif %}
       </li>
       {% if nota.arquivo_resumo %}<li><a href="{{ url_for('baixar_arquivo', chave=nota.chave, tipo='resumo') }}">Resumo (resNFe)</a></li>{% endif %}

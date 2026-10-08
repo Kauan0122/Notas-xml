@@ -196,3 +196,64 @@ def test_sincronizacao_automatica_respeita_intervalo(ambiente):
     tarefa.thread.join(5)
     assert dist.pedidos == ["000000000000000"]
     assert gerenciador.verificar_agenda() is None  # SEFAZ pede 1 hora
+
+
+# ---- DANFE ------------------------------------------------------------------
+
+def _popular_completa(cfg):
+    from .nfe_exemplo import CHAVE_COMPLETA, nfe_completa
+
+    banco = Armazenamento(cfg.pasta_dados)
+    banco.guardar("procNFe", nfe_completa().encode())
+    banco.fechar()
+    return CHAVE_COMPLETA
+
+
+def test_danfe_da_nota(ambiente):
+    app, _, _, _, cfg = ambiente()
+    chave = _popular_completa(cfg)
+    cliente = app.test_client()
+
+    r = cliente.get(f"/nota/{chave}/danfe.pdf")
+    assert r.status_code == 200 and r.mimetype == "application/pdf" and r.data.startswith(b"%PDF")
+    assert "attachment" not in r.headers.get("Content-Disposition", "")  # abre no navegador
+
+    r = cliente.get(f"/nota/{chave}/danfe.pdf?baixar=1")
+    assert f"DANFE-{chave}.pdf" in r.headers["Content-Disposition"] and "attachment" in r.headers["Content-Disposition"]
+
+    html = cliente.get("/").get_data(as_text=True)
+    assert f"/nota/{chave}/danfe.pdf" in html
+    assert "Ver DANFE" in cliente.get(f"/nota/{chave}").get_data(as_text=True)
+
+
+def test_danfe_sem_xml_completo(ambiente):
+    app, _, _, _, cfg = ambiente()
+    _popular(cfg)  # OUTRA só tem resumo
+    r = app.test_client().get(f"/nota/{OUTRA}/danfe.pdf")
+    assert r.status_code == 404 and "ainda não foi baixado" in r.get_data(as_text=True)
+    assert app.test_client().get("/nota/123/danfe.pdf").status_code == 404
+
+
+def test_danfe_de_xml_invalido_mostra_erro(ambiente):
+    app, _, _, _, cfg = ambiente()
+    _popular(cfg)  # proc_nfe mínimo da fixture não tem dados suficientes para um DANFE
+    r = app.test_client().get(f"/nota/{CHAVE}/danfe.pdf")
+    assert r.status_code == 400 and "Não foi possível gerar o DANFE" in r.get_data(as_text=True)
+
+
+def test_zip_de_danfes_das_selecionadas(ambiente):
+    app, _, _, _, cfg = ambiente()
+    _popular(cfg)
+    chave = _popular_completa(cfg)
+    cliente = app.test_client()
+    csrf = _csrf(cliente)
+
+    r = cliente.post("/acoes/selecionadas", data={"csrf": csrf, "acao": "danfe", "chave": [chave, OUTRA, CHAVE]})
+    assert r.mimetype == "application/zip"
+    arquivos = zipfile.ZipFile(io.BytesIO(r.data))
+    assert arquivos.namelist() == [f"DANFE-{chave}.pdf"]  # resumo e XML inválido ficam de fora
+    assert arquivos.read(arquivos.namelist()[0]).startswith(b"%PDF")
+
+    r = cliente.post("/acoes/selecionadas", data={"csrf": csrf, "acao": "danfe", "chave": [OUTRA]},
+                     follow_redirects=True)
+    assert "Nenhuma das notas escolhidas" in r.get_data(as_text=True)

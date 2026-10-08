@@ -43,25 +43,37 @@ jobs:
         run: >
           pyinstaller --noconfirm --clean --onefile --console --name NotaXML
           --icon empacotamento/notaxml.ico --collect-data notaxml
+          --collect-data brazilfiscalreport --collect-data fpdf --collect-data barcode
           empacotamento/NotaXML.py
 
-      - name: Testar o executável (abre e responde)
+      - name: Testar o executável (abre, mostra as notas e gera o DANFE)
         shell: pwsh
         env:
           NOTAXML_SEM_NAVEGADOR: "1"
+          NFE_CERT_SENHA: "1234"
         run: |
-          $p = Start-Process -FilePath dist\NotaXML.exe -PassThru -RedirectStandardOutput saida.txt -RedirectStandardError erros.txt
+          # pasta portátil com configuração, certificado falso e uma NF-e de exemplo
+          $chave = (python empacotamento/preparar_teste.py portatil).Trim()
+          Copy-Item dist\NotaXML.exe portatil\
+          $p = Start-Process -FilePath (Resolve-Path portatil\NotaXML.exe) -WorkingDirectory portatil -PassThru `
+                 -RedirectStandardOutput saida.txt -RedirectStandardError erros.txt
           $ok = $false
           for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
             Start-Sleep -Seconds 1
             try { $ok = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/saude).Content -eq "notaxml" } catch {}
           }
           Get-Content saida.txt, erros.txt -ErrorAction SilentlyContinue
-          if (-not $ok) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; throw "O executável não respondeu" }
-          $pagina = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/configuracao).Content
-          Stop-Process -Id $p.Id -Force
-          if ($pagina -notmatch "Bem-vindo ao NotaXML") { throw "Tela de configuração não carregou" }
-          Write-Host "Executável OK"
+          try {
+            if (-not $ok) { throw "O executável não respondeu" }
+            $pagina = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/).Content
+            if ($pagina -notmatch "Notas recebidas") { throw "A lista de notas não carregou" }
+            $pdf = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8000/nota/$chave/danfe.pdf"
+            $inicio = [System.Text.Encoding]::ASCII.GetString($pdf.Content[0..3])
+            if ($pdf.Headers['Content-Type'] -notmatch "application/pdf" -or $inicio -ne "%PDF") { throw "DANFE inválido" }
+            Write-Host "Executável OK (DANFE de $($pdf.Content.Length) bytes)"
+          } finally {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
 
       - uses: actions/upload-artifact@v4
         with:

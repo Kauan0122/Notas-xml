@@ -85,6 +85,7 @@ Abre o navegador em <http://127.0.0.1:8000> com:
 - **Sincronizar agora** (com opção de dar ciência nas notas novas) e um painel que mostra o andamento ao vivo;
 - **Manifestação em lote**: marque as notas, escolha o evento e clique em *Manifestar*;
 - **Download** do XML de cada nota, de um **ZIP** com as selecionadas/filtradas e exportação **CSV**;
+- **DANFE em PDF**: botão "DANFE" em cada nota (abre no navegador) e "DANFEs selecionados (ZIP)" para várias de uma vez;
 - Página de cada nota com dados, eventos (cancelamento, carta de correção...) e seus XMLs;
 - **Sincronização automática** de hora em hora enquanto o sistema estiver aberto (`[web] sincronizacao_automatica`).
 
@@ -119,6 +120,9 @@ notaxml manifestar 3526...0001 --evento nao-realizada -j "Mercadoria não foi en
 notaxml baixar 3526...0001
 notaxml baixar
 
+# DANFE em PDF de notas já baixadas
+notaxml danfe 3526...0001 -o pdfs
+
 # Consulta o que já foi baixado
 notaxml listar
 notaxml listar --pendentes
@@ -132,6 +136,16 @@ Agende `notaxml sincronizar --ciencia-automatica` para rodar **de hora em hora**
 - **Linux (cron):** `0 * * * * cd /caminho/do/projeto && NFE_CERT_SENHA=... .venv/bin/notaxml sincronizar --ciencia-automatica >> sync.log 2>&1`
 - **Windows:** Agendador de Tarefas, executando `.venv\Scripts\notaxml.exe sincronizar --ciencia-automatica`
   com "Iniciar em" apontando para a pasta do projeto.
+
+## Sobre o DANFE
+
+O DANFE é gerado **a partir do XML completo** da nota (por isso só existe para notas que já têm o XML:
+dê a Ciência da Operação primeiro). Notas canceladas saem com a marca d'água "CANCELADA".
+O documento fiscal é o XML; o DANFE é apenas a representação para leitura e impressão, desenhada no
+leiaute padrão da NF-e (modelo 55, retrato). Notas de consumidor (NFC-e) não são distribuídas por este serviço.
+
+O PDF é feito com a biblioteca [BrazilFiscalReport](https://github.com/Engenere/BrazilFiscalReport)
+(LGPL-3.0).
 
 ## Sobre a Manifestação do Destinatário
 
@@ -174,6 +188,7 @@ Se o `xmlsec1` estiver instalado, a assinatura da manifestação também é vali
 | `notaxml/distribuicao.py` | NFeDistribuicaoDFe (consulta por NSU e por chave) |
 | `notaxml/manifestacao.py` + `assinatura.py` | Eventos de manifestação assinados (XMLDSig) |
 | `notaxml/armazenamento.py` | XMLs em disco + índice SQLite |
+| `notaxml/danfe.py` | DANFE em PDF a partir do XML |
 | `notaxml/sincronizador.py` | Regras de NSU, intervalo de 1 hora e bloqueio 656 |
 | `notaxml/operacoes.py` | Operações compartilhadas pela CLI e pela web |
 | `notaxml/cli.py` | Linha de comando |

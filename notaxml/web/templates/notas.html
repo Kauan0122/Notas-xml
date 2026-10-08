@@ -69,7 +69,8 @@
            placeholder="Justificativa (15 a 255 caracteres)">
     <button class="botao primario" name="acao" value="manifestar" {{ 'disabled' if not tarefas.certificado }}>Manifestar</button>
     <button class="botao" name="acao" value="baixar" {{ 'disabled' if not tarefas.certificado }}>Buscar XML na SEFAZ</button>
-    <button class="botao" name="acao" value="zip">Baixar ZIP</button>
+    <button class="botao" name="acao" value="zip">XMLs selecionados (ZIP)</button>
+    <button class="botao" name="acao" value="danfe">DANFEs selecionados (ZIP)</button>
   </div>
 
   <div class="tabela-rolagem">
@@ -102,7 +103,8 @@
           {% else %}<span class="selo selo-aviso">Pendente</span>{% endif %}
         </td>
         <td class="nowrap c-xml">
-          {% if n.arquivo_xml %}<a href="{{ url_for('baixar_arquivo', chave=n.chave, tipo='nfe') }}">Baixar</a>
+          {% if n.arquivo_xml %}<a href="{{ url_for('baixar_arquivo', chave=n.chave, tipo='nfe') }}">XML</a>
+            · <a href="{{ url_for('danfe', chave=n.chave) }}" target="_blank" rel="noopener">DANFE</a>
           {% else %}<span class="muted">só resumo</span>{% endif %}
         </td>
       </tr>

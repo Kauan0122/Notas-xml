@@ -21,6 +21,7 @@ from .seguranca import cabecalhos, csrf_token, destino_seguro, verificar_csrf
 from .. import operacoes
 from ..armazenamento import Armazenamento, Filtro
 from ..config import Config
+from ..danfe import gerar_danfe
 from ..erros import ErroNotaXML
 from ..manifestacao import EVENTOS
 from .tarefas import GerenciadorTarefas
@@ -241,6 +242,22 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
             abort(404)
         return render_template("nota.html", nota=registro, eventos=b.eventos(chave))
 
+    def _pdf_da_nota(registro) -> bytes:
+        caminho = banco().caminho(registro["arquivo_xml"])
+        return gerar_danfe(caminho.read_bytes(), cancelada=registro["situacao"] == "cancelada")
+
+    @app.get("/nota/<chave>/danfe.pdf")
+    def danfe(chave):
+        registro = banco().nota(chave)
+        if registro is None or not registro["arquivo_xml"] or not banco().caminho(registro["arquivo_xml"]).is_file():
+            abort(404, "O XML completo desta nota ainda não foi baixado, então não dá para gerar o DANFE.")
+        try:
+            pdf = _pdf_da_nota(registro)
+        except ErroNotaXML as exc:
+            abort(400, str(exc))
+        return send_file(io.BytesIO(pdf), mimetype="application/pdf", download_name=f"DANFE-{chave}.pdf",
+                         as_attachment=bool(request.args.get("baixar")))
+
     @app.get("/nota/<chave>/<tipo>.xml")
     def baixar_arquivo(chave, tipo):
         registro = banco().nota(chave)
@@ -294,6 +311,27 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
         nome = f"nfe-{datetime.now():%Y%m%d-%H%M}.zip"
         return send_file(memoria, mimetype="application/zip", as_attachment=True, download_name=nome)
 
+    def _zip_danfes(notas_selecionadas):
+        memoria = io.BytesIO()
+        gerados, falhas = 0, 0
+        with zipfile.ZipFile(memoria, "w", zipfile.ZIP_DEFLATED) as arquivo_zip:
+            for n in notas_selecionadas:
+                if not n["arquivo_xml"] or not banco().caminho(n["arquivo_xml"]).is_file():
+                    continue
+                try:
+                    arquivo_zip.writestr(f"DANFE-{n['chave']}.pdf", _pdf_da_nota(n))
+                    gerados += 1
+                except ErroNotaXML:
+                    falhas += 1
+        if not gerados:
+            flash("Nenhuma das notas escolhidas tem XML completo para gerar o DANFE.", "erro")
+            return None
+        if falhas:
+            flash(f"{falhas} nota(s) não puderam gerar o DANFE e ficaram fora do ZIP.", "erro")
+        memoria.seek(0)
+        return send_file(memoria, mimetype="application/zip", as_attachment=True,
+                         download_name=f"danfe-{datetime.now():%Y%m%d-%H%M}.zip")
+
     @app.get("/exportar.zip")
     def exportar_zip():
         resposta = _zip(banco().buscar(_filtro_da_requisicao(request.args)))
@@ -324,6 +362,8 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
         acao = request.form.get("acao")
         if acao == "zip":
             return _zip(banco().buscar(Filtro(chaves=chaves))) or voltar()
+        if acao == "danfe":
+            return _zip_danfes(banco().buscar(Filtro(chaves=chaves))) or voltar()
         if acao == "baixar":
             iniciar_tarefa("Download de XML", operacoes.baixar, chaves)
             return voltar()
