@@ -116,7 +116,9 @@ jobs:
             if ($pdf.Headers['Content-Type'] -notmatch "application/pdf" -or $inicio -ne "%PDF") { throw "DANFE inválido" }
             Write-Host "Executável OK (DANFE de $($pdf.Content.Length) bytes)"
           } finally {
-            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            # o .exe empacotado tem 2 processos (lançador + sistema): encerra a árvore inteira
+            taskkill /PID $p.Id /T /F | Out-Null
+            Start-Sleep -Seconds 2
           }
 
       - name: Testar o modo servidor do executável (aberto para a rede, com senha)
@@ -146,7 +148,9 @@ jobs:
             if ($r.StatusCode -ne 302 -or $r.Headers.Location -notmatch "/login") { throw "Não pediu login" }
             Write-Host "Modo servidor OK"
           } finally {
-            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            # o .exe empacotado tem 2 processos (lançador + sistema): encerra a árvore inteira
+            taskkill /PID $p.Id /T /F | Out-Null
+            Start-Sleep -Seconds 2
           }
 
       - uses: actions/upload-artifact@v4
