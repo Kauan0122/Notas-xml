@@ -72,18 +72,14 @@ class ClienteSefaz:
         if self._pem is not None:
             self._pem.__exit__(*exc)
 
-    def chamar(self, url: str, acao: str, conteudo: etree._Element) -> etree._Element:
-        """Envia `conteudo` dentro do Body e devolve o primeiro elemento do Body da resposta."""
+    def _requisitar(self, metodo: str, url: str, **kwargs) -> requests.Response:
         if self._sessao is None:
             raise RuntimeError("Use ClienteSefaz dentro de um bloco 'with'.")
         try:
-            resposta = self._sessao.post(
-                url,
-                data=montar_envelope(conteudo),
-                headers={"Content-Type": f'application/soap+xml; charset=utf-8; action="{acao}"'},
-                timeout=self.timeout,
+            return self._sessao.request(
+                metodo, url, timeout=self.timeout,
                 # explícito na chamada: na sessão, REQUESTS_CA_BUNDLE do ambiente teria prioridade
-                verify=self.verificar_ssl,
+                verify=self.verificar_ssl, **kwargs,
             )
         except requests.exceptions.SSLError as exc:
             raise ErroSefaz(
@@ -99,6 +95,19 @@ class ClienteSefaz:
         except requests.exceptions.RequestException as exc:
             raise ErroSefaz(f"Falha de comunicação com a SEFAZ: {exc}") from exc
 
+    def testar(self, url: str) -> int:
+        """Abre a conexão segura (TLS com o certificado da empresa) e pede só o WSDL, sem consultar notas.
+
+        Devolve o status HTTP; erros de SSL ou de rede viram ErroSefaz com a explicação.
+        """
+        return self._requisitar("GET", url, params={"wsdl": ""}).status_code
+
+    def chamar(self, url: str, acao: str, conteudo: etree._Element) -> etree._Element:
+        """Envia `conteudo` dentro do Body e devolve o primeiro elemento do Body da resposta."""
+        resposta = self._requisitar(
+            "POST", url, data=montar_envelope(conteudo),
+            headers={"Content-Type": f'application/soap+xml; charset=utf-8; action="{acao}"'},
+        )
         try:
             raiz = parse(resposta.content)
         except etree.XMLSyntaxError as exc:

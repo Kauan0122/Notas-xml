@@ -32,6 +32,45 @@ jobs:
       - name: Testes
         run: pytest -q
 
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar o docker-compose
+        run: NOTAXML_WEB_SENHA=teste docker compose config -q
+      - name: Construir a imagem
+        run: docker build -t notaxml:teste .
+      - name: Testar o contêiner (saúde, login e primeiro uso)
+        run: |
+          docker run -d --name nx -p 8000:8000 -e NOTAXML_WEB_SENHA=senha-de-teste -v nxdados:/dados notaxml:teste
+          for i in $(seq 1 30); do
+            [ "$(curl -s http://127.0.0.1:8000/saude)" = "notaxml" ] && break
+            sleep 1
+          done
+          test "$(curl -s http://127.0.0.1:8000/saude)" = "notaxml"
+          # sem login, redireciona para a tela de entrada
+          saida=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://127.0.0.1:8000/)
+          echo "$saida"
+          case "$saida" in "302 "*"/login"*) ;; *) echo "esperava redirecionar para /login"; exit 1;; esac
+          # entra com a senha e vê a tela de primeiro uso
+          curl -s -c jar -o login.html http://127.0.0.1:8000/login
+          csrf=$(sed -n 's/.*name="csrf" value="\([^"]*\)".*/\1/p' login.html | head -1)
+          test -n "$csrf"
+          curl -s -b jar -c jar -o /dev/null -d "csrf=$csrf" -d "senha=senha-de-teste" "http://127.0.0.1:8000/login"
+          curl -s -b jar http://127.0.0.1:8000/configuracao | grep -q "Bem-vindo ao NotaXML"
+          # roda sem ser root e grava no volume
+          test "$(docker exec nx id -u)" = "1000"
+          docker exec nx test -s /dados/chave_sessao
+          # o contêiner declara-se saudável
+          for i in $(seq 1 20); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' nx)" = "healthy" ] && break
+            sleep 3
+          done
+          test "$(docker inspect -f '{{.State.Health.Status}}' nx)" = "healthy"
+      - name: Registros do contêiner (em caso de falha)
+        if: failure()
+        run: docker logs nx
+
   exe:
     needs: testes
     runs-on: windows-latest

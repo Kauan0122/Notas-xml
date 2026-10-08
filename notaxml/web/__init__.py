@@ -1,6 +1,5 @@
 """Interface web do notaxml (Flask)."""
 
-import hmac
 import io
 import os
 import secrets
@@ -12,15 +11,15 @@ from datetime import date, datetime
 from functools import partial
 from pathlib import Path
 
-from flask import (Flask, abort, flash, g, jsonify, redirect, render_template, request, send_file, session,
-                   url_for)
+from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, send_file, url_for
 
 from . import configuracao
+from .autenticacao import LimitadorLogin, exige_login, registrar_login
 from .seguranca import cabecalhos, csrf_token, destino_seguro, verificar_csrf
 
 from .. import operacoes
 from ..armazenamento import Armazenamento, Filtro
-from ..config import Config
+from ..config import Config, ConfigWeb
 from ..danfe import gerar_danfe
 from ..erros import ErroNotaXML
 from ..manifestacao import EVENTOS
@@ -91,10 +90,12 @@ def _filtro_da_requisicao(origem) -> Filtro:
     )
 
 
-def _flask(chave_secreta: str | None) -> Flask:
+def _flask(chave_secreta: str | None, https: bool = False) -> Flask:
     app = Flask(__name__)
     app.secret_key = chave_secreta or secrets.token_hex(32)
     app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_SECURE"] = https  # com HTTPS o cookie nunca trafega em conexão aberta
     app.after_request(cabecalhos)
     app.add_template_filter(_moeda, "moeda")
     app.add_template_filter(_data, "data")
@@ -106,17 +107,22 @@ def _flask(chave_secreta: str | None) -> Flask:
 
 
 def criar_app_configuracao(caminho_config: Path, recarregar: Callable, pasta_dados_padrao: Path | None = None,
-                           erro: str | None = None, chave_secreta: str | None = None) -> Flask:
+                           erro: str | None = None, chave_secreta: str | None = None,
+                           opcoes_web: ConfigWeb | None = None, limitador: LimitadorLogin | None = None) -> Flask:
     """App usado enquanto não existe configuração válida: só mostra a tela de configuração."""
-    app = _flask(chave_secreta)
+    opcoes_web = opcoes_web or ConfigWeb()
+    app = _flask(chave_secreta, opcoes_web.https)
 
     @app.context_processor
     def contexto():
         return {"cfg": None, "csrf_token": csrf_token, "tarefas": None, "erro_config": erro}
 
+    exige_login(app, opcoes_web.senha)  # primeiro: quem não entrou vai direto para o login
+    registrar_login(app, opcoes_web.senha, limitador, destino_padrao="/configuracao")
+
     @app.before_request
     def proteger():
-        if request.endpoint not in ("static", "configuracao"):
+        if request.endpoint not in ("static", "configuracao", "login", "sair"):
             return redirect(url_for("configuracao"))
         verificar_csrf()
         return None
@@ -127,8 +133,9 @@ def criar_app_configuracao(caminho_config: Path, recarregar: Callable, pasta_dad
 
 def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminho_config: Path | None = None,
               recarregar: Callable | None = None, pasta_dados_padrao: Path | None = None,
-              desktop: bool = False, chave_secreta: str | None = None) -> Flask:
-    app = _flask(chave_secreta)
+              desktop: bool = False, chave_secreta: str | None = None,
+              limitador: LimitadorLogin | None = None) -> Flask:
+    app = _flask(chave_secreta, cfg.web.https)
     app.config["NOTAXML"] = cfg
     gerenciador = gerenciador or GerenciadorTarefas(cfg)
     app.extensions["notaxml_tarefas"] = gerenciador
@@ -163,10 +170,11 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
     def proteger():
         if request.endpoint in ("static",):
             return None
-        if cfg.web.senha and not session.get("autenticado") and request.endpoint != "login":
-            return redirect(url_for("login", proximo=request.full_path))
         verificar_csrf()
         return None
+
+    exige_login(app, cfg.web.senha)
+    registrar_login(app, cfg.web.senha, limitador, destino_padrao="/")
 
     if caminho_config is not None and recarregar is not None:
         configuracao.registrar(app, caminho_config, recarregar, pasta_dados_padrao, lambda: gerenciador.ocupado)
@@ -198,25 +206,6 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
 
     def voltar():
         return redirect(destino_seguro(request.form.get("voltar", ""), url_for("notas")))
-
-    # ---- autenticação -------------------------------------------------------
-
-    @app.route("/login", methods=["GET", "POST"])
-    def login():
-        if not cfg.web.senha:
-            return redirect(url_for("notas"))
-        if request.method == "POST":
-            if hmac.compare_digest(request.form.get("senha", "").encode(), cfg.web.senha.encode()):
-                session.clear()
-                session["autenticado"] = True
-                return redirect(destino_seguro(request.args.get("proximo", ""), url_for("notas")))
-            flash("Senha incorreta.", "erro")
-        return render_template("login.html")
-
-    @app.post("/sair")
-    def sair():
-        session.clear()
-        return redirect(url_for("login"))
 
     # ---- páginas ------------------------------------------------------------
 
@@ -282,6 +271,11 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminh
     @app.get("/certificado")
     def certificado():
         return render_template("certificado.html", cert=gerenciador.certificado)
+
+    @app.post("/certificado/testar")
+    def testar_conexao():
+        iniciar_tarefa("Teste de conexão", operacoes.testar_conexao)
+        return redirect(url_for("notas"))
 
     @app.post("/certificado")
     def desbloquear_certificado():

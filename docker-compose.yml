@@ -1,0 +1,23 @@
+# Uso: copie .env.exemplo para .env, defina a senha de acesso e rode:  docker compose up -d --build
+services:
+  notaxml:
+    build: .
+    image: notaxml:latest
+    container_name: notaxml
+    restart: unless-stopped
+    ports:
+      - "${NOTAXML_PORTA:-8000}:8000"
+    environment:
+      TZ: America/Sao_Paulo
+      # Senha para entrar no sistema (obrigatória: o sistema recusa abrir na rede sem ela).
+      NOTAXML_WEB_SENHA: ${NOTAXML_WEB_SENHA:?Defina NOTAXML_WEB_SENHA no arquivo .env}
+      # Opcional: senha do certificado A1, para a sincronização automática voltar sozinha após reiniciar.
+      NFE_CERT_SENHA: ${NFE_CERT_SENHA:-}
+      # Opcional: cadeia ICP-Brasil, se der erro de SSL (veja o README). O arquivo fica dentro do volume /dados.
+      # NOTAXML_CA_BUNDLE: /dados/icp-brasil.pem
+    volumes:
+      - notaxml-dados:/dados
+
+volumes:
+  notaxml-dados:
+    name: notaxml-dados

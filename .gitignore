@@ -18,3 +18,6 @@ dados/
 .venv-build/
 *.spec
 empacotamento/notaxml.ico
+
+# Docker
+.env

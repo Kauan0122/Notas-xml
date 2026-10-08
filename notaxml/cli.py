@@ -47,6 +47,11 @@ def cmd_manifestar(cfg: Config, args):
         operacoes.manifestar(sinc, print, chaves, args.evento, args.justificativa)
 
 
+def cmd_testar_conexao(cfg: Config, args):
+    with _sessao(cfg) as sinc:
+        operacoes.testar_conexao(sinc, print)
+
+
 def cmd_baixar(cfg: Config, args):
     with _sessao(cfg) as sinc:
         operacoes.baixar(sinc, print, validar_chaves(args.chaves) if args.chaves else None)
@@ -100,14 +105,14 @@ def cmd_listar(cfg: Config, args):
 
 
 def cmd_web(args):
-    from .config import ler_secoes
+    from .config import ler_config_web
     from .web.servidor import Aplicacao, host_local, rodar
 
-    web = ler_secoes(args.config).get("web", {})
-    host = args.host or web.get("host", "127.0.0.1")
-    porta = args.porta or int(web.get("porta", 8000))
+    web = ler_config_web(args.config)
+    host = args.host or web.host
+    porta = args.porta or web.porta
     aplicacao = Aplicacao(args.config)
-    if not host_local(host) and not (aplicacao.cfg and aplicacao.cfg.web.senha):
+    if not host_local(host) and not aplicacao.opcoes_web.senha:
         raise ErroNotaXML("Para abrir a interface na rede (host diferente de 127.0.0.1), defina uma senha de "
                           "acesso em [web] senha ou na variável NOTAXML_WEB_SENHA.")
     print("Ctrl+C para encerrar.")
@@ -120,6 +125,9 @@ def criar_parser() -> argparse.ArgumentParser:
     subs = parser.add_subparsers(dest="comando", required=True)
 
     subs.add_parser("certificado", help="mostra os dados do certificado e testa a senha").set_defaults(func=cmd_certificado)
+
+    subs.add_parser("testar-conexao", help="testa a conexão segura com a SEFAZ (sem consultar notas)"
+                    ).set_defaults(func=cmd_testar_conexao)
 
     p = subs.add_parser("sincronizar", help="baixa todos os documentos novos disponíveis na SEFAZ")
     p.add_argument("--ciencia-automatica", action="store_true",

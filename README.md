@@ -35,6 +35,39 @@ O GitHub também gera o executável a cada atualização do código (aba **Actio
 
 Para gerar no próprio computador Windows (com Python 3.11+ instalado): `empacotamento\construir.bat`.
 
+## Hospedar no servidor da empresa (acesso pela rede interna)
+
+Em vez de instalar em cada computador, rode o NotaXML em **um servidor** e acesse pelo navegador de qualquer
+máquina da rede: `http://IP-DO-SERVIDOR:8000`. A sincronização automática funciona 24 horas, mesmo com os
+computadores desligados. Recomendado: **Docker** (Linux, NAS ou Windows com Docker Desktop).
+
+```bash
+git clone https://github.com/Kauan0122/Notas-xml.git && cd Notas-xml
+cp .env.exemplo .env          # edite o .env e defina NOTAXML_WEB_SENHA
+docker compose up -d --build
+```
+
+1. Abra `http://IP-DO-SERVIDOR:8000` de qualquer computador da rede e entre com a senha do `.env`.
+2. Na tela de boas-vindas, envie o certificado A1, informe a senha dele e a UF (igual ao `.exe`).
+3. Pronto. Na tela **Certificado** há o botão **Testar conexão com a SEFAZ**.
+
+- **Tudo fica no volume `notaxml-dados`**: configuração, certificado, banco e XMLs. Atualizar não perde nada:
+  `git pull && docker compose up -d --build`.
+- **Senha do certificado:** ao reiniciar o servidor ela é esquecida (fica só na memória). Defina `NFE_CERT_SENHA`
+  no `.env` para a sincronização automática voltar sozinha, ou desbloqueie na tela **Certificado**.
+- **Backup** (inclui o certificado, guarde com cuidado):
+  `docker run --rm -v notaxml-dados:/dados -v "$PWD":/backup alpine tar czf /backup/notaxml-dados.tar.gz -C /dados .`
+- **Segurança:** o acesso é protegido por senha (12 horas de sessão; 5 senhas erradas bloqueiam aquele
+  computador por 15 minutos). Use **somente na rede interna**: não libere a porta no roteador nem publique na
+  internet. A conexão é HTTP simples, adequada a uma rede confiável; para HTTPS ponha um proxy reverso na
+  frente e defina `NOTAXML_PROXY=1` e `NOTAXML_HTTPS=1`.
+- **Erro de SSL no servidor Linux:** o Windows já conhece as autoridades da ICP-Brasil; o Linux, em geral, não.
+  Se **Testar conexão** falhar na verificação do servidor, baixe a cadeia ICP-Brasil (veja *Problemas comuns*),
+  copie o arquivo para o volume com `docker compose cp icp-brasil.pem notaxml:/dados/icp-brasil.pem`,
+  descomente `NOTAXML_CA_BUNDLE` no `docker-compose.yml` e rode `docker compose up -d`.
+- **Sem Docker (Linux):** `pip install .` e depois
+  `NOTAXML_WEB_SENHA=... notaxml web --host 0.0.0.0 --sem-navegador` (use systemd para manter ligado).
+
 ## Como funciona
 
 1. A SEFAZ numera cada documento disponível para o seu CNPJ com um **NSU** sequencial.
@@ -122,6 +155,9 @@ notaxml manifestar 3526...0001 --evento nao-realizada -j "Mercadoria não foi en
 notaxml baixar 3526...0001
 notaxml baixar
 
+# Testa a conexão segura com a SEFAZ (sem consultar notas)
+notaxml testar-conexao
+
 # DANFE em PDF de notas já baixadas
 notaxml danfe 3526...0001 -o pdfs
 
@@ -194,4 +230,5 @@ Se o `xmlsec1` estiver instalado, a assinatura da manifestação também é vali
 | `notaxml/sincronizador.py` | Regras de NSU, intervalo de 1 hora e bloqueio 656 |
 | `notaxml/operacoes.py` | Operações compartilhadas pela CLI e pela web |
 | `notaxml/cli.py` | Linha de comando |
-| `notaxml/web/` | Interface web (Flask): rotas, tarefas em segundo plano, templates e estilos |
+| `notaxml/web/` | Interface web (Flask): rotas, login, tarefas em segundo plano, templates e estilos |
+| `Dockerfile`, `docker-compose.yml` | Hospedagem em servidor |

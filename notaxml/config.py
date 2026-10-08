@@ -19,6 +19,8 @@ class ConfigWeb:
     senha: str | None = None  # senha de acesso à interface (obrigatória fora do localhost)
     sincronizacao_automatica: bool = False
     intervalo_minutos: int = 60
+    https: bool = False  # o acesso é por HTTPS (marca o cookie de sessão como "Secure")
+    atras_de_proxy: bool = False  # há um proxy reverso (Caddy, nginx...) na frente: confia no X-Forwarded-*
 
 
 @dataclass
@@ -37,6 +39,25 @@ class Config:
     @property
     def cuf(self) -> int:
         return CODIGOS_UF[self.uf]
+
+
+def segredo_do_ambiente(nome: str) -> str | None:
+    """Valor de uma variável de ambiente ou, no padrão dos Docker secrets, do arquivo apontado por NOME_FILE."""
+    valor = os.environ.get(nome)
+    if valor:
+        return valor
+    arquivo = os.environ.get(f"{nome}_FILE")
+    if arquivo:
+        try:
+            return Path(arquivo).read_text(encoding="utf-8").strip() or None
+        except OSError as exc:
+            raise ErroConfiguracao(f"Não foi possível ler {nome}_FILE ({arquivo}): {exc}") from exc
+    return None
+
+
+def _booleano_do_ambiente(nome: str, padrao: bool) -> bool:
+    valor = os.environ.get(nome)
+    return padrao if valor is None else valor.strip().lower() in ("1", "true", "sim", "yes", "on")
 
 
 def _caminho(base: Path, valor: str) -> Path:
@@ -67,7 +88,7 @@ def carregar_config(caminho: str | Path) -> Config:
     cert = dados.get("certificado", {})
     if not cert.get("arquivo"):
         raise ErroConfiguracao("Informe o caminho do certificado A1 (.pfx) em [certificado] arquivo.")
-    senha = os.environ.get("NFE_CERT_SENHA") or cert.get("senha") or None
+    senha = segredo_do_ambiente("NFE_CERT_SENHA") or cert.get("senha") or None
     if senha and senha.startswith(segredo.PREFIXO):
         try:
             senha = segredo.revelar(senha)
@@ -79,8 +100,11 @@ def carregar_config(caminho: str | Path) -> Config:
     if nome_ambiente not in AMBIENTES:
         raise ErroConfiguracao("[sefaz] ambiente deve ser \"producao\" ou \"homologacao\".")
     verificar_ssl: bool | str = bool(sefaz.get("verificar_ssl", True))
-    if verificar_ssl and sefaz.get("ca_bundle"):
-        verificar_ssl = str(_caminho(base, sefaz["ca_bundle"]))
+    ca_bundle = os.environ.get("NOTAXML_CA_BUNDLE") or sefaz.get("ca_bundle")
+    if verificar_ssl and ca_bundle:
+        verificar_ssl = str(_caminho(base, ca_bundle))
+        if not Path(verificar_ssl).is_file():
+            raise ErroConfiguracao(f"Cadeia de certificados (ca_bundle) não encontrada: {verificar_ssl}")
 
     return Config(
         documento=documento,
@@ -103,10 +127,24 @@ def _config_web(web: dict) -> ConfigWeb:
     return ConfigWeb(
         host=str(web.get("host", "127.0.0.1")),
         porta=int(web.get("porta", 8000)),
-        senha=os.environ.get("NOTAXML_WEB_SENHA") or web.get("senha") or None,
+        senha=segredo_do_ambiente("NOTAXML_WEB_SENHA") or web.get("senha") or None,
         sincronizacao_automatica=bool(web.get("sincronizacao_automatica", False)),
         intervalo_minutos=intervalo,
+        https=_booleano_do_ambiente("NOTAXML_HTTPS", bool(web.get("https", False))),
+        atras_de_proxy=_booleano_do_ambiente("NOTAXML_PROXY", bool(web.get("atras_de_proxy", False))),
     )
+
+
+def ler_config_web(caminho: str | Path) -> ConfigWeb:
+    """Opções do servidor web mesmo sem uma configuração completa (primeiro uso ou arquivo com problemas).
+
+    Variáveis de ambiente (NOTAXML_WEB_SENHA, NOTAXML_HTTPS, NOTAXML_PROXY) valem em qualquer situação.
+    """
+    web = ler_secoes(caminho).get("web", {})
+    try:
+        return _config_web(web)
+    except (ErroConfiguracao, ValueError, TypeError):
+        return _config_web({"senha": web.get("senha")})
 
 
 def _toml(valor) -> str:

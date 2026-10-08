@@ -10,6 +10,11 @@
     <dt>Válido até</dt><dd>{{ cert.valido_ate.strftime('%d/%m/%Y') }}</dd>
     <dt>Arquivo</dt><dd class="mono">{{ cfg.certificado }}</dd>
   </dl>
+  <form method="post" action="{{ url_for('testar_conexao') }}" class="linha-botoes">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <button class="botao">Testar conexão com a SEFAZ</button>
+    <span class="muted pequeno">Confere o certificado e a cadeia de confiança, sem consultar notas.</span>
+  </form>
   {% if cert.cnpj and cert.cnpj[:8] != cfg.documento[:8] %}
     <div class="aviso aviso-erro">O CNPJ do certificado é de outra empresa (raiz diferente da configurada: {{ cfg.documento | documento }}).</div>
   {% endif %}

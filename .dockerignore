@@ -1,0 +1,16 @@
+.git
+.github
+.venv*
+__pycache__
+*.pyc
+*.egg-info
+build
+dist
+tests
+empacotamento
+dados
+config.toml
+*.pfx
+*.p12
+*.pem
+.env

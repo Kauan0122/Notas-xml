@@ -92,6 +92,16 @@ def manifestar(sinc: Sincronizador, log: Log, chaves: list[str], evento: str, ju
     return resultados
 
 
+def testar_conexao(sinc: Sincronizador, log: Log):
+    """Confere a conexão segura com a SEFAZ (certificado da empresa + cadeia de confiança) sem consultar notas."""
+    from .distribuicao import URLS
+
+    url = URLS[sinc.dist.ambiente]
+    log(f"Testando a conexão segura com {url.split('/')[2]}...")
+    status = sinc.dist.cliente.testar(url)
+    log(f"Conexão segura estabelecida (HTTP {status}). O certificado e a cadeia de confiança estão funcionando.")
+
+
 def baixar(sinc: Sincronizador, log: Log, chaves: list[str] | None = None):
     chaves = chaves or sinc.banco.chaves_aguardando_xml()
     if not chaves:

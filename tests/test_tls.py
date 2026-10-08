@@ -104,3 +104,12 @@ def test_autoridades_do_sistema(servidor, monkeypatch):
     monkeypatch.setenv("SSL_CERT_FILE", servidor["ac"])
     with ClienteSefaz(servidor["cert"], True) as cliente:
         assert cliente.chamar(servidor["url"], "acao", etree.Element("x")).text == "EMPRESA:11222333000181"
+
+
+def test_testar_conexao_sem_consultar_notas(servidor):
+    with ClienteSefaz(servidor["cert"], servidor["ac"]) as cliente:
+        assert cliente.testar(servidor["url"]) == 501  # o servidor de teste só aceita POST; o importante é o TLS
+
+    with pytest.raises(ErroSefaz, match="ca_bundle"):
+        with ClienteSefaz(servidor["cert"], True) as cliente:
+            cliente.testar(servidor["url"])
