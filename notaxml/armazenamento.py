@@ -138,7 +138,7 @@ class Armazenamento:
         destino = self.pasta_xml / relativo
         destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_bytes(xml)
-        return str(destino.relative_to(self.pasta))
+        return destino.relative_to(self.pasta).as_posix()  # mesmo formato em qualquer sistema
 
     @staticmethod
     def _pasta_mes(chave: str) -> str:
