@@ -7,6 +7,32 @@ do Ambiente Nacional da SEFAZ, autenticado com o **certificado digital A1** da e
 Também envia a **Manifestação do Destinatário** (Ciência, Confirmação, Desconhecimento e Operação não
 Realizada), que é o que libera o XML completo de cada nota.
 
+## Jeito mais fácil: NotaXML.exe (Windows)
+
+1. Baixe o `NotaXML.exe` (veja abaixo onde encontrar).
+2. Dê dois cliques. Abre uma janela preta (deixe-a aberta — é o sistema rodando) e o navegador
+   com a tela de boas-vindas.
+3. Escolha o certificado A1 (`.pfx`), digite a senha, a UF e clique em **Salvar**. Pronto.
+
+- Não precisa instalar Python nem nada mais.
+- A configuração e uma cópia do certificado ficam em `%LOCALAPPDATA%\NotaXML`; os XMLs baixados ficam
+  em **Documentos\NotaXML** (há um botão "Abrir pasta dos XMLs" na tela).
+- Marcando "Lembrar a senha", ela é guardada criptografada pelo Windows, só para o seu usuário.
+- Para encerrar, feche a janela preta. Abrir o `.exe` de novo com o sistema já aberto só abre o navegador.
+- **Modo portátil** (pendrive/pasta de rede): coloque um `config.toml` ao lado do `.exe` e tudo fica nessa pasta.
+- Para abrir junto com o Windows: tecla `Win+R` → `shell:startup` → cole ali um atalho do `NotaXML.exe`.
+
+**Aviso do Windows na primeira vez:** como o executável não é assinado digitalmente, o SmartScreen pode
+mostrar "O Windows protegeu o computador". Clique em **Mais informações → Executar assim mesmo**.
+
+### Onde baixar o .exe
+
+O GitHub gera o executável automaticamente a cada atualização do código (aba **Actions** do repositório →
+execução mais recente de "Gerar NotaXML.exe" → seção *Artifacts* → `NotaXML-windows`). Ao criar uma tag
+`v1.0.0`, o `.exe` também é publicado na página **Releases**.
+
+Para gerar no próprio computador Windows (com Python 3.11+ instalado): `empacotamento\construir.bat`.
+
 ## Como funciona
 
 1. A SEFAZ numera cada documento disponível para o seu CNPJ com um **NSU** sequencial.

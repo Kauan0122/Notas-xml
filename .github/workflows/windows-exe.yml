@@ -1,0 +1,85 @@
+name: Gerar NotaXML.exe
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências
+        run: pip install ".[dev]"
+      - name: Testes
+        run: pytest -q
+
+  exe:
+    needs: testes
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências
+        run: pip install . pyinstaller pillow
+      - name: Gerar ícone
+        run: python empacotamento/gerar_icone.py
+      - name: Gerar executável
+        run: >
+          pyinstaller --noconfirm --clean --onefile --console --name NotaXML
+          --icon empacotamento/notaxml.ico --collect-data notaxml
+          empacotamento/NotaXML.py
+
+      - name: Testar o executável (abre e responde)
+        shell: pwsh
+        env:
+          NOTAXML_SEM_NAVEGADOR: "1"
+        run: |
+          $p = Start-Process -FilePath dist\NotaXML.exe -PassThru -RedirectStandardOutput saida.txt -RedirectStandardError erros.txt
+          $ok = $false
+          for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
+            Start-Sleep -Seconds 1
+            try { $ok = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/saude).Content -eq "notaxml" } catch {}
+          }
+          Get-Content saida.txt, erros.txt -ErrorAction SilentlyContinue
+          if (-not $ok) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; throw "O executável não respondeu" }
+          $pagina = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/configuracao).Content
+          Stop-Process -Id $p.Id -Force
+          if ($pagina -notmatch "Bem-vindo ao NotaXML") { throw "Tela de configuração não carregou" }
+          Write-Host "Executável OK"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NotaXML-windows
+          path: dist/NotaXML.exe
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: exe
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: NotaXML-windows
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: NotaXML.exe
+          generate_release_notes: true

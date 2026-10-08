@@ -18,6 +18,9 @@
     <input type="hidden" name="voltar" value="{{ request.full_path }}">
     <label class="check"><input type="checkbox" name="ciencia" value="1" {{ 'checked' if cfg.ciencia_automatica }}> Dar ciência nas novas</label>
     <button class="botao primario" {{ 'disabled' if not tarefas.certificado or tarefas.ocupado }}>Sincronizar agora</button>
+    {% if desktop %}
+    <button class="botao" formaction="{{ url_for('abrir_pasta') }}" title="{{ cfg.pasta_dados }}">Abrir pasta dos XMLs</button>
+    {% endif %}
   </form>
 </div>
 

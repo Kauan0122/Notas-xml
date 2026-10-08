@@ -2,13 +2,21 @@
 
 import hmac
 import io
+import os
 import secrets
+import subprocess
+import sys
 import zipfile
+from collections.abc import Callable
 from datetime import date, datetime
 from functools import partial
+from pathlib import Path
 
 from flask import (Flask, abort, flash, g, jsonify, redirect, render_template, request, send_file, session,
                    url_for)
+
+from . import configuracao
+from .seguranca import cabecalhos, csrf_token, destino_seguro, verificar_csrf
 
 from .. import operacoes
 from ..armazenamento import Armazenamento, Filtro
@@ -82,19 +90,48 @@ def _filtro_da_requisicao(origem) -> Filtro:
     )
 
 
-def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None) -> Flask:
+def _flask(chave_secreta: str | None) -> Flask:
     app = Flask(__name__)
-    app.secret_key = secrets.token_hex(32)
-    app.config["NOTAXML"] = cfg
-    gerenciador = gerenciador or GerenciadorTarefas(cfg)
-    app.extensions["notaxml_tarefas"] = gerenciador
-
+    app.secret_key = chave_secreta or secrets.token_hex(32)
+    app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+    app.after_request(cabecalhos)
     app.add_template_filter(_moeda, "moeda")
     app.add_template_filter(_data, "data")
     app.add_template_filter(partial(_data, com_hora=True), "data_hora")
     app.add_template_filter(_documento, "documento")
     app.add_template_filter(_chave, "chave")
     app.add_template_filter(lambda c: NOMES_EVENTOS.get(c or "", c or ""), "evento")
+    return app
+
+
+def criar_app_configuracao(caminho_config: Path, recarregar: Callable, pasta_dados_padrao: Path | None = None,
+                           erro: str | None = None, chave_secreta: str | None = None) -> Flask:
+    """App usado enquanto não existe configuração válida: só mostra a tela de configuração."""
+    app = _flask(chave_secreta)
+
+    @app.context_processor
+    def contexto():
+        return {"cfg": None, "csrf_token": csrf_token, "tarefas": None, "erro_config": erro}
+
+    @app.before_request
+    def proteger():
+        if request.endpoint not in ("static", "configuracao"):
+            return redirect(url_for("configuracao"))
+        verificar_csrf()
+        return None
+
+    configuracao.registrar(app, caminho_config, recarregar, pasta_dados_padrao)
+    return app
+
+
+def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None, caminho_config: Path | None = None,
+              recarregar: Callable | None = None, pasta_dados_padrao: Path | None = None,
+              desktop: bool = False, chave_secreta: str | None = None) -> Flask:
+    app = _flask(chave_secreta)
+    app.config["NOTAXML"] = cfg
+    gerenciador = gerenciador or GerenciadorTarefas(cfg)
+    app.extensions["notaxml_tarefas"] = gerenciador
+
 
     # ---- infraestrutura -----------------------------------------------------
 
@@ -109,11 +146,6 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None) -> Fla
         if b is not None:
             b.fechar()
 
-    def csrf_token() -> str:
-        if "csrf" not in session:
-            session["csrf"] = secrets.token_urlsafe(32)
-        return session["csrf"]
-
     @app.context_processor
     def contexto():
         return {
@@ -122,6 +154,8 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None) -> Fla
             "tarefas": gerenciador,
             "eventos_manifestacao": ROTULOS_EVENTOS_MANIFESTACAO,
             "ambiente_nome": "Produção" if cfg.ambiente == 1 else "Homologação",
+            "configuravel": caminho_config is not None,
+            "desktop": desktop,
         }
 
     @app.before_request
@@ -130,18 +164,22 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None) -> Fla
             return None
         if cfg.web.senha and not session.get("autenticado") and request.endpoint != "login":
             return redirect(url_for("login", proximo=request.full_path))
-        if request.method == "POST":
-            enviado = request.form.get("csrf", "")
-            if not session.get("csrf") or not hmac.compare_digest(enviado, session["csrf"]):
-                abort(400, "Formulário expirado. Recarregue a página e tente de novo.")
+        verificar_csrf()
         return None
 
-    @app.after_request
-    def cabecalhos(resposta):
-        resposta.headers.setdefault("X-Content-Type-Options", "nosniff")
-        resposta.headers.setdefault("X-Frame-Options", "DENY")
-        resposta.headers.setdefault("Referrer-Policy", "same-origin")
-        return resposta
+    if caminho_config is not None and recarregar is not None:
+        configuracao.registrar(app, caminho_config, recarregar, pasta_dados_padrao, lambda: gerenciador.ocupado)
+
+    if desktop:
+        @app.post("/abrir-pasta")
+        def abrir_pasta():
+            pasta = Path(cfg.pasta_dados) / "xml"
+            pasta.mkdir(parents=True, exist_ok=True)
+            if sys.platform == "win32":
+                os.startfile(pasta)  # noqa: S606 - pasta local do próprio usuário
+            else:
+                subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(pasta)])
+            return voltar()
 
     def iniciar_tarefa(nome, funcao, *args, **kwargs):
         try:
@@ -158,8 +196,7 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None) -> Fla
             return []
 
     def voltar():
-        destino = request.form.get("voltar", "")
-        return redirect(destino if destino.startswith("/") and not destino.startswith("//") else url_for("notas"))
+        return redirect(destino_seguro(request.form.get("voltar", ""), url_for("notas")))
 
     # ---- autenticação -------------------------------------------------------
 
@@ -171,8 +208,7 @@ def criar_app(cfg: Config, gerenciador: GerenciadorTarefas | None = None) -> Fla
             if hmac.compare_digest(request.form.get("senha", "").encode(), cfg.web.senha.encode()):
                 session.clear()
                 session["autenticado"] = True
-                proximo = request.args.get("proximo", "")
-                return redirect(proximo if proximo.startswith("/") and not proximo.startswith("//") else url_for("notas"))
+                return redirect(destino_seguro(request.args.get("proximo", ""), url_for("notas")))
             flash("Senha incorreta.", "erro")
         return render_template("login.html")
 

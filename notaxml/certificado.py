@@ -30,8 +30,12 @@ class Certificado:
         caminho = Path(caminho)
         if not caminho.is_file():
             raise ErroCertificado(f"Arquivo de certificado não encontrado: {caminho}")
+        return cls.de_bytes(caminho.read_bytes(), senha)
+
+    @classmethod
+    def de_bytes(cls, dados: bytes, senha: str) -> "Certificado":
         try:
-            chave, cert, adicionais = pkcs12.load_key_and_certificates(caminho.read_bytes(), senha.encode())
+            chave, cert, adicionais = pkcs12.load_key_and_certificates(dados, senha.encode())
         except ValueError as exc:
             raise ErroCertificado("Não foi possível abrir o certificado: senha incorreta ou arquivo inválido.") from exc
         if chave is None or cert is None:

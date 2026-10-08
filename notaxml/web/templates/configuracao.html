@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block titulo %}Configuração{% endblock %}
+{% block conteudo %}
+<section class="caixa estreita {{ 'centralizada' if not cfg }}">
+  {% if not cfg %}
+    <h1>Bem-vindo ao NotaXML</h1>
+    <p class="muted">Informe os dados da empresa e o certificado digital A1 para começar a baixar as notas da SEFAZ.</p>
+    {% if erro_config %}<div class="aviso aviso-erro">Não foi possível ler a configuração atual: {{ erro_config }}</div>{% endif %}
+  {% else %}
+    <h1>Configurações</h1>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="form-empilhado" id="form-configuracao">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+
+    <label>Certificado digital A1 (.pfx ou .p12)
+      <input type="file" name="certificado" accept=".pfx,.p12" {{ 'required' if not valores.tem_certificado }}>
+      {% if valores.tem_certificado %}<span class="muted pequeno">Já existe um certificado salvo. Escolha um arquivo só se quiser trocar.</span>{% endif %}
+    </label>
+
+    <label>Senha do certificado
+      <input type="password" name="senha" autocomplete="off" {{ 'required' if not valores.tem_certificado }}>
+      {% if valores.tem_certificado %}<span class="muted pequeno">Deixe em branco para manter.</span>{% endif %}
+    </label>
+
+    {% if pode_lembrar %}
+    <label class="check"><input type="checkbox" name="lembrar" value="1" {{ 'checked' if valores.senha_lembrada or not valores.tem_certificado }}>
+      Lembrar a senha neste computador (fica criptografada pelo Windows, só para o seu usuário)</label>
+    {% else %}
+    <p class="muted pequeno">A senha do certificado será pedida sempre que o sistema for aberto.</p>
+    {% endif %}
+
+    <div class="grade-2">
+      <label>CNPJ da empresa
+        <input type="text" name="cnpj" value="{{ valores.cnpj | documento }}" inputmode="numeric"
+               placeholder="Preenchido pelo certificado se vazio">
+      </label>
+      <label>UF
+        <select name="uf" required>
+          <option value="">Escolha…</option>
+          {% for uf in ufs %}<option value="{{ uf }}" {{ 'selected' if valores.uf == uf }}>{{ uf }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <label class="check"><input type="checkbox" name="sincronizacao_automatica" value="1" {{ 'checked' if valores.sincronizacao_automatica }}>
+      Buscar notas novas automaticamente a cada hora enquanto o sistema estiver aberto</label>
+    <label class="check"><input type="checkbox" name="ciencia_automatica" value="1" {{ 'checked' if valores.ciencia_automatica }}>
+      Dar "Ciência da Operação" automaticamente nas notas novas (libera o XML completo)</label>
+
+    <details>
+      <summary>Avançado</summary>
+      <label>Ambiente da SEFAZ
+        <select name="ambiente">
+          <option value="producao" {{ 'selected' if valores.ambiente == 'producao' }}>Produção (notas reais)</option>
+          <option value="homologacao" {{ 'selected' if valores.ambiente == 'homologacao' }}>Homologação (testes)</option>
+        </select>
+      </label>
+      <p class="muted pequeno">Arquivo de configuração: <span class="mono">{{ caminho_config }}</span></p>
+    </details>
+
+    <button class="botao primario">Salvar</button>
+  </form>
+</section>
+{% endblock %}

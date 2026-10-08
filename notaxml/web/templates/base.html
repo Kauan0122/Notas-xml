@@ -10,11 +10,12 @@
 <body>
   <header class="topo">
     <div class="topo-interno">
-      <a class="marca" href="{{ url_for('notas') }}"><span class="logo">NF</span> NotaXML</a>
-      {% if not cfg.web.senha or session.get('autenticado') %}
+      <a class="marca" href="/"><span class="logo">NF</span> NotaXML</a>
+      {% if cfg and (not cfg.web.senha or session.get('autenticado')) %}
       <nav>
         <a href="{{ url_for('notas') }}" class="{{ 'ativo' if request.endpoint == 'notas' }}">Notas</a>
         <a href="{{ url_for('certificado') }}" class="{{ 'ativo' if request.endpoint == 'certificado' }}">Certificado</a>
+        {% if configuravel %}<a href="{{ url_for('configuracao') }}" class="{{ 'ativo' if request.endpoint == 'configuracao' }}">Configurações</a>{% endif %}
         {% if cfg.web.senha %}
         <form method="post" action="{{ url_for('sair') }}" class="inline">
           <input type="hidden" name="csrf" value="{{ csrf_token() }}">
@@ -42,7 +43,7 @@
       {% endfor %}
     {% endwith %}
 
-    {% if not cfg.web.senha or session.get('autenticado') %}
+    {% if cfg and (not cfg.web.senha or session.get('autenticado')) %}
     {% set ultima = tarefas.ultima() %}
     <section id="painel-tarefa" class="painel-tarefa {{ 'oculto' if not ultima }}"
              data-url="{{ url_for('tarefa') }}" data-situacao="{{ ultima.situacao if ultima else '' }}"

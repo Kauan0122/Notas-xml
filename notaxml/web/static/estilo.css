@@ -208,3 +208,11 @@ dd { margin: 0; }
   .tabela-notas tfoot td:empty { display: none; }
   dd { margin-bottom: .5rem; }
 }
+
+.grade-2 { display: grid; grid-template-columns: 2fr 1fr; gap: .75rem; }
+details summary { cursor: pointer; color: var(--texto-suave); margin-bottom: .5rem; }
+details[open] { display: grid; gap: .6rem; }
+details label { display: grid; gap: .3rem; }
+@media (max-width: 760px) { .grade-2 { grid-template-columns: 1fr; } }
+.form-empilhado label.check { display: flex; align-items: flex-start; gap: .5rem; }
+.form-empilhado label.check input { margin-top: .3rem; }

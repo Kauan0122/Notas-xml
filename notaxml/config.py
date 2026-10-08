@@ -1,9 +1,11 @@
+import json
 import os
 import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import segredo
 from .erros import ErroConfiguracao
 from .ufs import CODIGOS_UF
 
@@ -66,6 +68,11 @@ def carregar_config(caminho: str | Path) -> Config:
     if not cert.get("arquivo"):
         raise ErroConfiguracao("Informe o caminho do certificado A1 (.pfx) em [certificado] arquivo.")
     senha = os.environ.get("NFE_CERT_SENHA") or cert.get("senha") or None
+    if senha and senha.startswith(segredo.PREFIXO):
+        try:
+            senha = segredo.revelar(senha)
+        except (OSError, RuntimeError, ValueError):
+            senha = None  # guardada por outro usuário/computador: a interface pede de novo
 
     sefaz = dados.get("sefaz", {})
     nome_ambiente = str(sefaz.get("ambiente", "producao")).lower()
@@ -100,3 +107,34 @@ def _config_web(web: dict) -> ConfigWeb:
         sincronizacao_automatica=bool(web.get("sincronizacao_automatica", False)),
         intervalo_minutos=intervalo,
     )
+
+
+def _toml(valor) -> str:
+    if isinstance(valor, bool):
+        return "true" if valor else "false"
+    if isinstance(valor, int):
+        return str(valor)
+    return json.dumps(str(valor), ensure_ascii=False)  # escapes JSON são válidos em TOML
+
+
+def salvar_config(caminho: str | Path, secoes: dict[str, dict]):
+    """Grava o config.toml (usado pela tela de configuração). Valores None são omitidos."""
+    linhas = ["# Gerado pela tela de configuração do NotaXML.", ""]
+    for secao, valores in secoes.items():
+        linhas.append(f"[{secao}]")
+        linhas += [f"{chave} = {_toml(valor)}" for chave, valor in valores.items() if valor is not None]
+        linhas.append("")
+    caminho = Path(caminho)
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    temporario = caminho.with_suffix(".tmp")
+    temporario.write_text("\n".join(linhas), encoding="utf-8")
+    temporario.replace(caminho)
+
+
+def ler_secoes(caminho: str | Path) -> dict:
+    """Conteúdo bruto do config.toml (vazio se não existir ou estiver corrompido)."""
+    caminho = Path(caminho)
+    try:
+        return tomllib.loads(caminho.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return {}

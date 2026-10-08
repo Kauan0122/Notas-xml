@@ -13,3 +13,8 @@ config.toml
 *.p12
 *.pem
 dados/
+
+# Empacotamento
+.venv-build/
+*.spec
+empacotamento/notaxml.ico

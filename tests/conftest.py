@@ -14,23 +14,25 @@ CNPJ = "12345678000199"
 CHAVE = "35261099999999000199550010000012341000012345"
 
 
-@pytest.fixture(scope="session")
-def arquivo_pfx(tmp_path_factory):
+def gerar_pfx(cnpj: str = CNPJ, senha: bytes = b"1234", validade_dias: int = 365) -> bytes:
     chave = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    nome = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, f"EMPRESA TESTE LTDA:{CNPJ}")])
+    nome = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, f"EMPRESA TESTE LTDA:{cnpj}")])
     agora = datetime.now(timezone.utc)
     cert = (
         x509.CertificateBuilder()
         .subject_name(nome).issuer_name(nome).public_key(chave.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(agora - timedelta(days=1)).not_valid_after(agora + timedelta(days=365))
+        .not_valid_before(agora - timedelta(days=2)).not_valid_after(agora + timedelta(days=validade_dias))
         .sign(chave, hashes.SHA256())
     )
-    dados = pkcs12.serialize_key_and_certificates(
-        b"teste", chave, cert, None, serialization.BestAvailableEncryption(b"1234")
-    )
+    return pkcs12.serialize_key_and_certificates(b"teste", chave, cert, None,
+                                                 serialization.BestAvailableEncryption(senha))
+
+
+@pytest.fixture(scope="session")
+def arquivo_pfx(tmp_path_factory):
     caminho = tmp_path_factory.mktemp("cert") / "teste.pfx"
-    caminho.write_bytes(dados)
+    caminho.write_bytes(gerar_pfx())
     return caminho
 
 

@@ -76,38 +76,19 @@ def cmd_listar(cfg: Config, args):
     print(f"\n{len(notas)} nota(s). XMLs em: {cfg.pasta_dados / 'xml'}")
 
 
-def cmd_web(cfg: Config, args):
-    import ipaddress
-    import threading
-    import webbrowser
+def cmd_web(args):
+    from .config import ler_secoes
+    from .web.servidor import Aplicacao, host_local, rodar
 
-    from waitress import serve
-
-    from .web import criar_app
-
-    host = args.host or cfg.web.host
-    porta = args.porta or cfg.web.porta
-    try:
-        local = ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        local = host == "localhost"
-    if not local and not cfg.web.senha:
+    web = ler_secoes(args.config).get("web", {})
+    host = args.host or web.get("host", "127.0.0.1")
+    porta = args.porta or int(web.get("porta", 8000))
+    aplicacao = Aplicacao(args.config)
+    if not host_local(host) and not (aplicacao.cfg and aplicacao.cfg.web.senha):
         raise ErroNotaXML("Para abrir a interface na rede (host diferente de 127.0.0.1), defina uma senha de "
                           "acesso em [web] senha ou na variável NOTAXML_WEB_SENHA.")
-
-    app = criar_app(cfg)
-    tarefas = app.extensions["notaxml_tarefas"]
-    if cfg.web.sincronizacao_automatica:
-        tarefas.verificar_agenda()
-        tarefas.iniciar_agendador()
-
-    endereco = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{porta}"
-    print(f"NotaXML rodando em {endereco}  (Ctrl+C para encerrar)")
-    if tarefas.certificado is None:
-        print("Certificado bloqueado: informe a senha na tela 'Certificado' ou defina NFE_CERT_SENHA.")
-    if not args.sem_navegador:
-        threading.Timer(1.0, webbrowser.open, args=(endereco,)).start()
-    serve(app, host=host, port=porta, threads=8, ident="notaxml")
+    print("Ctrl+C para encerrar.")
+    rodar(aplicacao, host, porta, abrir_navegador=not args.sem_navegador)
 
 
 def criar_parser() -> argparse.ArgumentParser:
@@ -142,15 +123,17 @@ def criar_parser() -> argparse.ArgumentParser:
     p.add_argument("--host", help="endereço (padrão: [web] host do config, 127.0.0.1)")
     p.add_argument("--porta", type=int, help="porta (padrão: [web] porta do config, 8000)")
     p.add_argument("--sem-navegador", action="store_true", help="não abre o navegador automaticamente")
-    p.set_defaults(func=cmd_web)
+    p.set_defaults(func=cmd_web, sem_config=True)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = criar_parser().parse_args(argv)
     try:
-        cfg = carregar_config(args.config)
-        args.func(cfg, args)
+        if getattr(args, "sem_config", False):
+            args.func(args)  # a interface web tem tela própria para criar a configuração
+        else:
+            args.func(carregar_config(args.config), args)
     except (ErroNotaXML, ValueError) as exc:
         print(f"Erro: {exc}", file=sys.stderr)
         return 1
